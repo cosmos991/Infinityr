@@ -30,11 +30,12 @@ function remember() {
   } catch {}
 }
 remember();
-let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, vitalityCost: 25n, revision: null };
+let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, vitalityCost: 25n, autoBoss: false, pending: false, revision: null };
 let inFlight = false;
 let connected = false;
 let scheduled;
 let lastSync = 0;
+let catchUp = null;
 
 const fmt = number => number >= 1000000n
   ? number.toString()[0] + '.' + number.toString().slice(1, 3) + 'e' + (number.toString().length - 1)
@@ -78,11 +79,14 @@ function render() {
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
   byId('enemy-bar').style.width = Number(hp * 100n / maxEnemy) + '%';
-  byId('upgrade').disabled = !connected || inFlight || challenge || game.gold < cost();
-  byId('vitality').disabled = !connected || inFlight || challenge || game.gold < game.vitalityCost;
-  byId('challenge').disabled = !connected || inFlight || challenge;
+  const busy = !connected || inFlight || game.pending;
+  byId('auto-boss').checked = game.autoBoss;
+  byId('auto-boss').disabled = busy;
+  byId('upgrade').disabled = busy || challenge || game.gold < cost();
+  byId('vitality').disabled = busy || challenge || game.gold < game.vitalityCost;
+  byId('challenge').disabled = busy || challenge;
   byId('copy-save').disabled = pendingCreate;
-  byId('reset-save').disabled = !connected || inFlight;
+  byId('reset-save').disabled = busy;
 }
 
 function updateFromServer(data, returning) {
@@ -91,7 +95,7 @@ function updateFromServer(data, returning) {
   const previousFoe = foe;
   const previousFloor = floor;
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
-    maxHero: BigInt(data.maxHero), vitalityCost: BigInt(data.vitalityCost), revision: data.revision };
+    maxHero: BigInt(data.maxHero), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, pending: data.pending, revision: data.revision };
   floor = BigInt(data.floor);
   foe = monster(floor, data.challenge);
   hp = BigInt(data.hp);
@@ -106,12 +110,14 @@ function updateFromServer(data, returning) {
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
     };
   }
-  if (returning && reward) say('쉬는 동안 +' + fmt(reward) + ' 골드를 모았어요.');
+  if (returning) return;
   else if (data.result === 'won') say(fmt(game.best) + '층 보스 처치! ' + fmt(floor) + '층으로 이동했어요.');
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
   else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
   else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
+  else if (data.result === 'auto_on') say('이길 수 있는 보스에 자동으로 도전해요.');
+  else if (data.result === 'auto_off') say('보스 자동 도전을 껐어요.');
   else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
   else if (!lastSync) say('슬라임을 사냥하고 보스를 쓰러뜨리면 다음 층이 열려요.');
 }
@@ -121,15 +127,36 @@ async function synchronize(action = 'sync', targetCode = null) {
   clearTimeout(scheduled);
   inFlight = true;
   render();
-  const returning = !lastSync || performance.now() - lastSync > 8000;
   const priorConnection = connected;
   try {
     const command = !targetCode && pendingCreate ? 'create' : action;
     const data = await play(targetCode ?? saveCode, command, game.revision);
-    if (targetCode) saveCode = targetCode;
+    if (targetCode) {
+      saveCode = targetCode;
+      catchUp = null;
+      byId('return-summary').hidden = true;
+    }
     pendingCreate = false;
     remember();
-    updateFromServer(data, returning && !targetCode);
+    const gap = BigInt(data.gapSeconds);
+    if (!catchUp && (gap >= 8n || data.pending)) catchUp = { gap, gold: 0n };
+    updateFromServer(data, Boolean(catchUp));
+    if (catchUp) {
+      catchUp.gold += BigInt(data.reward);
+      if (!data.pending) {
+        const hours = catchUp.gap / 3600n;
+        const minutes = catchUp.gap / 60n % 60n;
+        const seconds = catchUp.gap % 60n;
+        const time = [hours && fmt(hours) + '시간', minutes && fmt(minutes) + '분', !hours && seconds && fmt(seconds) + '초']
+          .filter(Boolean).join(' ');
+        const cleared = game.best ? '최고 ' + fmt(game.best) + '층 클리어' : '클리어한 층 없음';
+        byId('return-summary-text').textContent = (time ? '방치 ' + time + ' · ' : '') +
+          '골드 +' + fmt(catchUp.gold) + ' · ' + cleared;
+        byId('return-summary').hidden = false;
+        say('방치 보상을 정산했어요.');
+        catchUp = null;
+      }
+    }
     connected = true;
     lastSync = performance.now();
     byId('save-status').textContent = '저장됨';
@@ -155,10 +182,12 @@ async function synchronize(action = 'sync', targetCode = null) {
   } finally {
     inFlight = false;
     render();
-    if (!document.hidden) scheduled = setTimeout(synchronize, connected ? (challenge ? 1050 : 2100) : 5000);
+    if (!document.hidden) scheduled = setTimeout(synchronize, connected ? (game.pending ? 25 : challenge ? 1050 : 2100) : 5000);
   }
 }
 
+byId('auto-boss').onchange = event => synchronize(event.target.checked ? 'auto_on' : 'auto_off');
+byId('dismiss-summary').onclick = () => { byId('return-summary').hidden = true; };
 byId('upgrade').onclick = () => synchronize('upgrade');
 byId('vitality').onclick = () => synchronize('vitality');
 byId('challenge').onclick = () => synchronize('challenge');

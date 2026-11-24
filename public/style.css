@@ -50,3 +50,10 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 
 .boss-forecast{margin-top:14px;padding:8px 10px;border-left:3px solid #b589b6;background:#251c34;color:#f1d7ec;font-size:.875rem}
 .boss-forecast[data-can-win="true"]{border-color:#85bf9d;color:#c1f0d0}
+
+.auto-settings,.return-summary{margin-top:12px;padding:10px 12px;border:1px solid var(--line);background:#1e192d}
+.auto-settings{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px 12px}
+.auto-settings label{display:inline-flex;align-items:center;gap:6px;font-size:.9rem;cursor:pointer}
+#auto-boss{width:1.15rem;height:1.15rem;accent-color:#ae83dc}
+.return-summary:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:10px;border-color:#65806c;color:#d0efce}
+.return-summary button{font:inherit;font-size:.875rem;padding:6px 10px;background:#2c3630;color:#d0efce;border:1px solid #65806c;cursor:pointer;flex-shrink:0}
