@@ -65,6 +65,7 @@ function render() {
 
 function updateFromServer(data, returning) {
   const previousHp = hp;
+  const previousFoe = foe;
   const previousFloor = floor;
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best), revision: data.revision };
   floor = BigInt(data.floor);
@@ -74,7 +75,10 @@ function updateFromServer(data, returning) {
   challenge = data.challenge;
   const reward = BigInt(data.reward);
   if (!returning && (reward || (floor === previousFloor && hp < previousHp))) {
-    effect = { at: performance.now(), hit: attack(), gold: reward };
+    effect = {
+      at: performance.now(), hit: attack(), gold: reward,
+      defeated: reward ? (data.result === 'lost' ? foe : previousFoe) : null
+    };
   }
   if (returning && reward) say('쉬는 동안 +' + fmt(reward) + ' 골드를 모았어요.');
   else if (data.result === 'won') say(fmt(game.best) + '층 클리어! 이 층에서 골드를 모아요.');
@@ -197,6 +201,51 @@ function torch(x, t) {
   rect(x + 16, 62 + Math.floor(t / 140) % 3, 5, 14, '#ffc376');
   rect(x + 17, 70, 3, 6, '#ffebaa');
 }
+const fragments = [
+  [-56,-18,4], [-42,-37,5], [-28,-48,3], [-13,-39,6],
+  [6,-49,4], [21,-38,5], [37,-43,3], [54,-22,5],
+  [-36,-11,3], [28,-14,4], [6,-24,3]
+];
+
+function drawEnemy(age, impact, t) {
+  const defeated = !reduced.matches && effect?.defeated;
+  if (defeated && age >= 90 && age < 380) {
+    const progress = (age - 90) / 290;
+    const spread = defeated.boss ? 1.35 : 1;
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    fragments.forEach(([dx, dy, size], index) => {
+      const x = 263 + dx * spread * (0.38 + progress);
+      const y = 108 + dy * progress * spread + 24 * progress ** 2;
+      const color = index % 4 === 0 ? (defeated.boss ? '#ffd276' : '#f3fff0') : defeated.zone[2];
+      rect(x, y, size, size, color);
+    });
+    ctx.restore();
+    return;
+  }
+
+  const collapsing = defeated && age < 90;
+  const enemy = collapsing ? defeated : foe;
+  const scale = enemy.boss ? 5 : 3;
+  const x = 263 - 12 * scale + (impact && !defeated ? 5 : 0);
+  const y = 120 - slime.length * scale - (Math.floor(t / 200) % 4 === 1 ? 2 : 0);
+  ctx.save();
+  if (collapsing) {
+    ctx.translate(0, 120);
+    ctx.scale(1, 1 - 0.7 * Math.max(0, age) / 90);
+    ctx.translate(0, -120);
+  } else if (defeated && age < 510) {
+    ctx.globalAlpha = (age - 380) / 130;
+  }
+  sprite(slime, x, y, scale, {
+    o:'#242138', m:impact ? '#f9e8ff' : enemy.zone[2], d:'#496572', h:'#f3fff0', p:'#f8b4c5'
+  });
+  if (enemy.boss) {
+    sprite(['g...g...g','gg.gg.ggg','ggggggggg','gooooooog','ggggggggg'], x + 37, y - 13, 5, {g:'#ffd276',o:'#a6614f'});
+  }
+  ctx.restore();
+}
+
 function draw(t) {
   const age = effect ? t - effect.at : Infinity;
   const impact = age < 155 && !reduced.matches;
@@ -225,13 +274,7 @@ function draw(t) {
   sprite(knight, 86 + (impact ? 23 : 0), 56, 4, {
     o:'#252039', r:'#f27a82', s:'#8588b9', l:'#d7e5ff', b:'#484d81', g:'#f0bd70'
   });
-  const scale = foe.boss ? 5 : 3;
-  const x = 263 - 12 * scale + (impact ? 5 : 0);
-  const y = 120 - slime.length * scale - (Math.floor(ambientTime / 200) % 4 === 1 ? 2 : 0);
-  sprite(slime, x, y, scale, {
-    o:'#242138', m:impact ? '#f9e8ff' : foe.zone[2], d:'#496572', h:'#f3fff0', p:'#f8b4c5'
-  });
-  if (foe.boss) sprite(['g...g...g','gg.gg.ggg','ggggggggg','gooooooog','ggggggggg'], x + 37, y - 13, 5, {g:'#ffd276',o:'#a6614f'});
+  drawEnemy(age, impact, ambientTime);
   if (age < 560) {
     if (impact) {
       rect(198, 72, 22, 3, '#fff3cd');
