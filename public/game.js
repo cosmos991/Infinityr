@@ -72,7 +72,7 @@ function render() {
     gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
     'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(maxEnemy),
-    cost: fmt(game.swordCost) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
+    cost: fmt(game.gold) + ' / ' + fmt(game.swordCost) + '골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
@@ -84,7 +84,12 @@ function render() {
   const busy = !connected || inFlight || game.pending;
   byId('auto-boss').checked = game.autoBoss;
   byId('auto-boss').disabled = busy;
-  byId('upgrade').disabled = busy || challenge || game.gold < game.swordCost;
+  const upgrade = byId('upgrade');
+  const ready = game.gold >= game.swordCost;
+  const funded = ready ? game.swordCost : game.gold;
+  byId('upgrade-fill').style.width = Number(funded * 1000n / game.swordCost) / 10 + '%';
+  upgrade.dataset.ready = String(ready);
+  upgrade.disabled = busy || challenge || !ready;
   byId('vitality').disabled = busy || challenge || game.gold < game.vitalityCost;
   byId('challenge').disabled = busy || challenge;
   byId('copy-save').disabled = pendingCreate;
