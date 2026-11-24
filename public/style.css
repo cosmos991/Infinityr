@@ -41,3 +41,6 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 .save-controls button{cursor:pointer}
 .save-controls button:disabled{opacity:.65;cursor:default}
 #save-message:empty{display:none}
+
+.reset-controls{margin-top:12px}
+.reset-controls button{color:#ffd5db;border-color:#a76b80;background:#46283a}

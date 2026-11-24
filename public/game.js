@@ -60,6 +60,7 @@ function render() {
   byId('upgrade').disabled = !connected || inFlight || challenge || game.gold < cost();
   byId('challenge').disabled = !connected || inFlight || challenge || !game.best;
   byId('copy-save').disabled = pendingCreate;
+  byId('reset-save').disabled = !connected || inFlight;
 }
 
 function updateFromServer(data, returning) {
@@ -84,7 +85,7 @@ function updateFromServer(data, returning) {
   else if (!lastSync) say('슬라임을 쓰러뜨리고 골드를 모아요.');
 }
 
-async function synchronize(action = 'sync', restoreCode = null) {
+async function synchronize(action = 'sync', targetCode = null) {
   if (inFlight) return;
   clearTimeout(scheduled);
   inFlight = true;
@@ -92,24 +93,31 @@ async function synchronize(action = 'sync', restoreCode = null) {
   const returning = !lastSync || performance.now() - lastSync > 8000;
   const priorConnection = connected;
   try {
-    const command = !restoreCode && pendingCreate ? 'create' : action;
-    const data = await play(restoreCode ?? saveCode, command, game.revision);
-    if (restoreCode) saveCode = restoreCode;
+    const command = !targetCode && pendingCreate ? 'create' : action;
+    const data = await play(targetCode ?? saveCode, command, game.revision);
+    if (targetCode) saveCode = targetCode;
     pendingCreate = false;
     remember();
-    updateFromServer(data, returning && !restoreCode);
+    updateFromServer(data, returning && !targetCode);
     connected = true;
     lastSync = performance.now();
     byId('save-status').textContent = '저장됨';
-    if (restoreCode) {
-      say('저장한 던전 진행을 불러왔어요.');
-      byId('save-message').textContent = '저장을 불러왔어요.';
+    if (targetCode) {
+      effect = undefined;
+      const message = action === 'create'
+        ? '진행을 초기화했어요. 1층에서 새로 시작해요.'
+        : '저장한 던전 진행을 불러왔어요.';
+      say(message);
+      byId('save-message').textContent = message;
       byId('save-input').value = '';
     }
   } catch (error) {
-    connected = restoreCode && priorConnection;
-    if (restoreCode) byId('save-message').textContent = error.message;
-    else {
+    connected = Boolean(targetCode && priorConnection);
+    if (targetCode) {
+      byId('save-message').textContent = action === 'create'
+        ? '초기화에 실패했어요. 잠시 후 다시 시도해 주세요.'
+        : error.message;
+    } else {
       byId('save-status').textContent = '재연결 중';
       say('서버 연결을 확인하고 다시 시도할게요.');
     }
@@ -130,6 +138,12 @@ byId('copy-save').onclick = async () => {
     byId('save-input').value = saveCode;
     byId('save-input').select();
     byId('save-message').textContent = '선택된 코드를 직접 복사하세요.';
+  }
+};
+byId('reset-save').onclick = () => {
+  if (inFlight || !connected) return;
+  if (window.confirm('1층에서 새로 시작할까요? 기존 진행으로 돌아가려면 지금 쓰는 저장 코드가 필요해요.')) {
+    synchronize('create', newSaveCode());
   }
 };
 byId('restore-save').onsubmit = event => {
