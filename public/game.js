@@ -49,6 +49,7 @@ function monster(floor, boss = false) {
 }
 let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
 let victory;
+let farmImpact;
 let bossJustBecameWinnable = false;
 function say(message, highlight = false) {
   byId('message').textContent = message;
@@ -67,16 +68,18 @@ function bossForecast(floor, power, maxHealth) {
 function render() {
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
+  const shownGold = farmImpact?.phase === 'windup' ? farmImpact.gold : game.gold;
+  const shownHp = farmImpact?.phase === 'windup' ? farmImpact.hp : farmImpact ? 0n : hp;
   const newlyWinnable = bossJustBecameWinnable && preview.canWin && !challenge;
   const forecastLabel = newlyWinnable ? '지금 이길 수 있어요' : preview.canWin ? '승리 예상' : '강화 필요';
   const forecast = byId('boss-forecast');
   forecast.hidden = !connected || challenge;
   forecast.dataset.canWin = String(preview.canWin);
   for (const [id, value] of Object.entries({
-    gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
+    gold: fmt(shownGold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
-    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(maxEnemy),
-    cost: fmt(game.gold) + ' / ' + fmt(game.swordCost) + '골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
+    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(shownHp) + ' / ' + fmt(maxEnemy),
+    cost: fmt(shownGold) + ' / ' + fmt(game.swordCost) + '골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
@@ -84,13 +87,13 @@ function render() {
       fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존'
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
-  byId('enemy-bar').style.width = Number(hp * 100n / maxEnemy) + '%';
+  byId('enemy-bar').style.width = Number(shownHp * 100n / maxEnemy) + '%';
   const busy = !connected || inFlight || game.pending;
   byId('auto-boss').checked = game.autoBoss;
   byId('auto-boss').disabled = busy;
   const upgrade = byId('upgrade');
-  const ready = game.gold >= game.swordCost;
-  const funded = ready ? game.swordCost : game.gold;
+  const ready = shownGold >= game.swordCost;
+  const funded = ready ? game.swordCost : shownGold;
   byId('upgrade-fill').style.width = Number(funded * 1000n / game.swordCost) / 10 + '%';
   upgrade.dataset.ready = String(ready);
   upgrade.disabled = busy || challenge || !ready;
@@ -102,7 +105,8 @@ function render() {
   byId('reset-save').disabled = busy;
 }
 
-function updateFromServer(data, returning) {
+function updateFromServer(data, returning, animateFarming = false) {
+  const previousGold = game.gold;
   const previousBest = game.best;
   const previousHp = hp;
   const previousHero = hero;
@@ -126,10 +130,16 @@ function updateFromServer(data, returning) {
     }
   }
   const reward = BigInt(data.reward);
+  if (animateFarming && !returning && !reduced.matches && !previousFoe.boss
+      && !foe.boss && floor === previousFloor && (reward || hp < previousHp)) {
+    farmImpact = { phase: 'windup', at: performance.now(), gold: previousGold, hp: previousHp, fatal: reward > 0n };
+  } else if (!animateFarming || returning || floor !== previousFloor || foe.boss) {
+    farmImpact = undefined;
+  }
   const counter = previousFoe.boss && (data.result === 'lost' || (challenge && hero < previousHero));
   if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
-      at: performance.now(), hit: attack(), gold: reward, counter: counter ? previousFoe.monarch : null,
+      at: farmImpact?.phase === 'windup' ? farmImpact.at : performance.now(), hit: attack(), gold: reward, counter: counter ? previousFoe.monarch : null,
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
     };
   }
@@ -162,9 +172,11 @@ async function synchronize(action = 'sync', targetCode = null) {
   inFlight = true;
   render();
   const priorConnection = connected;
+  let nextTurnDeadline;
   try {
     const command = !targetCode && pendingCreate ? 'create' : action;
     const data = await play(targetCode ?? saveCode, command, game.revision);
+    nextTurnDeadline = performance.now() + data.turnDelay;
     if (targetCode) {
       saveCode = targetCode;
       catchUp = null;
@@ -174,7 +186,7 @@ async function synchronize(action = 'sync', targetCode = null) {
     remember();
     const gap = BigInt(data.gapSeconds);
     if (!catchUp && (gap >= 8n || data.pending)) catchUp = { gap, gold: 0n };
-    updateFromServer(data, Boolean(catchUp));
+    updateFromServer(data, Boolean(catchUp), priorConnection && action === 'sync' && !targetCode);
     if (catchUp) {
       catchUp.gold += BigInt(data.reward);
       if (!data.pending) {
@@ -218,7 +230,10 @@ async function synchronize(action = 'sync', targetCode = null) {
   } finally {
     inFlight = false;
     render();
-    if (!document.hidden) scheduled = setTimeout(synchronize, connected ? (game.pending ? 25 : challenge ? 1050 : 2100) : 5000);
+    if (!document.hidden) {
+      const turnDelay = Number.isFinite(nextTurnDeadline) ? Math.max(30, nextTurnDeadline - performance.now()) : 1050;
+      scheduled = setTimeout(synchronize, connected ? (game.pending ? 25 : turnDelay) : 5000);
+    }
   }
 }
 
@@ -506,6 +521,17 @@ function drawDungeon(zone, time) {
 }
 
 function draw(t) {
+  if (farmImpact) {
+    const elapsed = t - farmImpact.at;
+    if (reduced.matches || elapsed >= strikeWindup + 380) {
+      farmImpact = undefined;
+      render();
+    } else if (elapsed >= strikeWindup && farmImpact.phase === 'windup') {
+      if (farmImpact.fatal) farmImpact.phase = 'defeat';
+      else farmImpact = undefined;
+      render();
+    }
+  }
   const victoryAge = victory ? t - victory.at : Infinity;
   const celebrating = victoryAge >= 0 && victoryAge < 1200;
   const banner = byId('clear-banner');
