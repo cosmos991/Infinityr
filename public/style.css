@@ -22,13 +22,16 @@ canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background
 .track{height:9px;background:#393047}.track div{height:100%;width:100%;background:#8cd88b}.track #enemy-bar{background:#ee859a}
 .status{min-height:3.5rem;display:flex;align-items:center;color:#dcc5ee;font-size:.92rem;padding:8px 2px}
 .actions button{font:inherit;text-align:left;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:65px;border:2px solid #a67b40;background:#4c3425;color:#ffe3ae;box-shadow:0 4px #211722;cursor:pointer;overflow-wrap:anywhere}
-.actions button:last-child{background:#3d2e56;border-color:#8b71ad;color:#f0e1ff}
+.actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+.actions #vitality{background:#492b3d;border-color:#a8688c;color:#ffd7eb}
+.actions #challenge{background:#3d2e56;border-color:#8b71ad;color:#f0e1ff}
 .actions button:disabled{opacity:.65;cursor:default}
 .actions button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .actions button:not(:disabled):hover{filter:brightness(1.23)}
 .icon{font:1.5rem monospace}.actions small{color:inherit;margin-top:2px}
 footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:22px;border:1px solid var(--line);background:#1e192d;text-align:center}
 footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1px solid var(--line)}
+@media(max-width:480px){.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.actions #challenge{grid-column:1/-1}}
 @media(max-width:420px){main{width:calc(100% - 24px)}.actions,.combatants{gap:8px}.combatants{padding:10px}.actions button{padding:8px;gap:6px}.wallet{gap:7px;padding:7px}}
 
 .save-panel{margin-top:16px;padding:12px 14px;background:#1e192d;border:1px solid var(--line)}

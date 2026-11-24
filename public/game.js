@@ -20,7 +20,7 @@ function remember() {
   } catch {}
 }
 remember();
-let game = { gold: 0n, level: 1n, best: 0n, revision: null };
+let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, vitalityCost: 25n, revision: null };
 let inFlight = false;
 let connected = false;
 let scheduled;
@@ -40,8 +40,7 @@ function monster(floor) {
     gold: (5n + floor * 3n) * (boss ? 3n : 1n)
   };
 }
-const heroMax = () => 54n + 6n * game.level;
-let floor = 1n, foe = monster(floor), hp = foe.hp, hero = heroMax(), challenge = false, effect;
+let floor = 1n, foe = monster(floor), hp = foe.hp, hero = game.maxHero, challenge = false, effect;
 function say(message) { byId('message').textContent = message; }
 
 function render() {
@@ -49,15 +48,16 @@ function render() {
   for (const [id, value] of Object.entries({
     gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '층 공략 중' : '자동 사냥', enemy: foe.boss ? '왕슬라임' : foe.zone[1],
-    'hero-hp': fmt(hero) + ' / ' + fmt(heroMax()), 'enemy-hp': fmt(hp) + ' / ' + fmt(foe.hp),
-    cost: fmt(cost()) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
+    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(foe.hp),
+    cost: fmt(cost()) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '다음 층 도전',
     target: challenge ? fmt(floor) + '층' : fmt(target) + '층'
   })) byId(id).textContent = value;
-  byId('hero-bar').style.width = Number(hero * 100n / heroMax()) + '%';
+  byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
   byId('enemy-bar').style.width = Number(hp * 100n / foe.hp) + '%';
   byId('upgrade').disabled = !connected || inFlight || challenge || game.gold < cost();
+  byId('vitality').disabled = !connected || inFlight || challenge || game.gold < game.vitalityCost;
   byId('challenge').disabled = !connected || inFlight || challenge || !game.best;
   byId('copy-save').disabled = pendingCreate;
   byId('reset-save').disabled = !connected || inFlight;
@@ -67,7 +67,8 @@ function updateFromServer(data, returning) {
   const previousHp = hp;
   const previousFoe = foe;
   const previousFloor = floor;
-  game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best), revision: data.revision };
+  game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
+    maxHero: BigInt(data.maxHero), vitalityCost: BigInt(data.vitalityCost), revision: data.revision };
   floor = BigInt(data.floor);
   foe = monster(floor);
   hp = BigInt(data.hp);
@@ -85,6 +86,7 @@ function updateFromServer(data, returning) {
   else if (data.result === 'lost') say('도전에 실패했어요. ' + fmt(game.best) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 도전! 기사가 자동으로 싸워요.');
   else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
+  else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
   else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
   else if (!lastSync) say('슬라임을 쓰러뜨리고 골드를 모아요.');
 }
@@ -133,6 +135,7 @@ async function synchronize(action = 'sync', targetCode = null) {
 }
 
 byId('upgrade').onclick = () => synchronize('upgrade');
+byId('vitality').onclick = () => synchronize('vitality');
 byId('challenge').onclick = () => synchronize('challenge');
 byId('copy-save').onclick = async () => {
   try {
