@@ -30,7 +30,7 @@ function remember() {
   } catch {}
 }
 remember();
-let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 25n, autoBoss: false, pending: false, revision: null };
+let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 12n, autoBoss: false, pending: false, revision: null };
 let inFlight = false;
 let connected = false;
 let scheduled;
