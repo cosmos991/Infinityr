@@ -172,61 +172,8 @@ window.addEventListener('pageshow', event => { if (event.persisted) synchronize(
 const canvas = byId('scene');
 const ctx = canvas.getContext('2d');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-const luna = [
-  '........ooooooo',
-  '......ooRRRRrrroo',
-  '....ooRRLLRRRrrrro',
-  '...oRRLLLLLRRRrRrro',
-  '..oRRLLLRRRRRrRrCrro',
-  '..oRLRRFFFFFFFRrGrro',
-  '.oRRRrFFffffFFFRrro',
-  '.oRRroFFfffffFFRrro',
-  '..oRroFweFFweFFRro',
-  '..oRroFieFFieFFRro',
-  '..oRrroFpfFFFpFRro',
-  '...oRRroFFFmFFFro',
-  '...oRrroFFFFFForo',
-  '....oRrrooffoorro',
-  '....oRrrvVgoSoRro',
-  '...oRrrvVVSSssorro',
-  '...orrvVVSWWsSSofo',
-  '..orovVVvSWWsSSofFo',
-  '...ovVVVvSssSSofoo',
-  '...ovVVvvogggoooo',
-  '..ovVVvvvsSsSSoo',
-  '..ovVvvvSssosSso',
-  '.ovVVvvoSSsoSSso',
-  '.ovvvvooSWsoSWso',
-  '..ooovooSssoSsso',
-  '.....ooooWWooWWo',
-  '........oooooooo'
-];
-const lunaPalette = {
-  o:'#21172e', R:'#e69bab', L:'#ffccd1', r:'#ac5c82',
-  C:'#fff3b1', G:'#e9b664', F:'#ffe1c3', f:'#f4bc9d',
-  w:'#fffaf4', e:'#47304b', i:'#7752a4', p:'#ed95a5', m:'#bc6b7e',
-  v:'#7450b0', V:'#b48cea', g:'#efbc67',
-  s:'#65769f', S:'#a4b8da', W:'#e5effa'
-};
-const lunaSword = [
-  '..............o',
-  '.............oWo',
-  '............oWWo',
-  '...........oWSo',
-  '..........oWSo',
-  '.........oWSo',
-  '........oWSo',
-  '.......oWSo',
-  '......oWSo',
-  '.....oWSo',
-  '....oWSo',
-  '..ooWSo',
-  '.oGgGo',
-  '..oGgo',
-  '.oCoGgo',
-  'oGooGo',
-  'oo..oo'
-];
+const luna = new Image();
+luna.src = new URL('./art/luna.webp', import.meta.url);
 const slime = [
   '........................','........ooooooo.........','......oommmmmmmoo.......',
   '.....ommmhhhhmmmmo......','....ommmhhmmmmmmmmo.....','...ommmmmmmmmmmmmmmo....',
@@ -318,12 +265,16 @@ function draw(t) {
     rect(x + 8, 131, 21, 2, '#1e1928');
     rect(x + 2, 146, 16, 2, '#242033');
   }
-  const lunaX = 79 + (impact ? 30 : 0);
-  const lunaY = 39 - (Math.floor(ambientTime / 350) % 4 === 1 ? 1 : 0);
-  rect(lunaX + 9, 117, 53, 6, '#14121e');
+  const lunaHeight = 94;
+  const lunaX = 70 + (impact ? 28 : 0);
+  const lunaY = 120 - lunaHeight - (Math.floor(ambientTime / 350) % 4 === 1 ? 1 : 0);
+  rect(lunaX + 27, 117, 47, 6, '#14121e');
   rect(231, 118, 64, 5, '#14121e');
-  sprite(luna, lunaX, lunaY, 3, lunaPalette);
-  sprite(lunaSword, lunaX + 45, lunaY + 12, 3, lunaPalette);
+  if (luna.naturalWidth) {
+    const width = Math.round(lunaHeight * luna.naturalWidth / luna.naturalHeight);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(luna, lunaX, lunaY, width, lunaHeight);
+  }
   drawEnemy(age, impact, ambientTime);
   if (age < 560) {
     if (impact) {
