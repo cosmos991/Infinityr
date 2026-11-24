@@ -172,11 +172,28 @@ window.addEventListener('pageshow', event => { if (event.persisted) synchronize(
 const canvas = byId('scene');
 const ctx = canvas.getContext('2d');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-const knight = [
-  '......rrr.......','.......rrr......','.....ooooo......','....ossllso.....',
-  '....osllllo.....','....osoooso.....','....ossbbo......','.....oooo....l..',
-  '...obbsbbo..ll..','..obsssbbo.llo..','..obslsbbollo...','..obbbsooll.....',
-  '...obbboggo.....','...oobboo.......','...osooos.......','...ooo.ooo......'
+const luna = [
+  '......oooo..........',
+  '.....ohhhho.........',
+  '...oohHHhhho........',
+  '..ohhoHhhffo........',
+  '..oHhophfffFo.......',
+  '.ohhhohhfofFo.......',
+  '.ohhoooffffFo.......',
+  '..oo..offFFo........',
+  '.....oovooo......l..',
+  '....ovVvsoo.....ll..',
+  '...ovVvssSo....lLo..',
+  '..ovVvvSssso..lLo...',
+  '..ovvvvvSsooolLo....',
+  '..ovVvvvosfflLo.....',
+  '.ovVvvvoossoggo.....',
+  '.ovvvvoosssooo......',
+  '..ovvooosoo.........',
+  '...oo.ososo.........',
+  '......os.oso........',
+  '.....ooo..ooo.......',
+  '.....ooo..ooo.......'
 ];
 const slime = [
   '........................','........ooooooo.........','......oommmmmmmoo.......',
@@ -271,8 +288,10 @@ function draw(t) {
   }
   rect(86, 118, 61, 5, '#14121e');
   rect(231, 118, 64, 5, '#14121e');
-  sprite(knight, 86 + (impact ? 23 : 0), 56, 4, {
-    o:'#252039', r:'#f27a82', s:'#8588b9', l:'#d7e5ff', b:'#484d81', g:'#f0bd70'
+  sprite(luna, 87 + (impact ? 28 : 0), 57, 3, {
+    o:'#21152e', h:'#a84b6c', H:'#ee8a9a', p:'#c7a3fa',
+    f:'#efae89', F:'#ffcea5', v:'#633b98', V:'#b887f1',
+    s:'#60749c', S:'#a6bce5', l:'#e8f5ff', L:'#9fc9ed', g:'#f0bd70'
   });
   drawEnemy(age, impact, ambientTime);
   if (age < 560) {
