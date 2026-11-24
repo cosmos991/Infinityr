@@ -1,31 +1,34 @@
+import { play, newSaveCode } from './cloud.js';
+
 const byId = id => document.getElementById(id);
-const turnMs = 1050;
-const key = 'slime-hollow-v1';
+const key = 'slime-hollow-cloud-v1';
 const places = [
   ['이끼 동굴', '이끼 슬라임', '#91e6a1', '#29463e'],
   ['자수정 광산', '수정 슬라임', '#d09bf9', '#423252'],
   ['잿불 굴', '잿불 슬라임', '#ffa16f', '#502e38']
 ];
-let game = { gold: 0n, level: 1n, best: 0n, paid: 0, at: Date.now() };
+let stored = null;
 try {
-  const saved = JSON.parse(localStorage.getItem(key));
-  if (saved) {
-    const { gold, level, best, paid, at } = saved;
-    if (BigInt(gold) >= 0n && BigInt(level) > 0n && BigInt(best) >= 0n &&
-        Number.isSafeInteger(at) && at > 0 && Number.isInteger(paid) && paid >= 0) {
-      game = { gold: BigInt(gold), level: BigInt(level), best: BigInt(best), paid, at };
-    }
-  }
+  stored = JSON.parse(localStorage.getItem(key));
 } catch {}
-const save = () => {
+const validCode = code => typeof code === 'string' && /^[a-f0-9]{64}$/.test(code);
+let saveCode = validCode(stored?.code) ? stored.code : newSaveCode();
+let pendingCreate = !validCode(stored?.code) || stored.pending === true;
+function remember() {
   try {
-    localStorage.setItem(key, JSON.stringify(game, (_, value) => typeof value === 'bigint' ? String(value) : value));
+    localStorage.setItem(key, JSON.stringify({ code: saveCode, pending: pendingCreate }));
   } catch {}
-};
+}
+remember();
+let game = { gold: 0n, level: 1n, best: 0n, revision: null };
+let inFlight = false;
+let connected = false;
+let scheduled;
+let lastSync = 0;
+
 const fmt = number => number >= 1000000n
   ? number.toString()[0] + '.' + number.toString().slice(1, 3) + 'e' + (number.toString().length - 1)
   : number.toLocaleString('ko-KR');
-const farmingFloor = () => game.best || 1n;
 const attack = () => game.level * 4n + 4n;
 const cost = () => 18n + 12n * game.level + game.level * (game.level - 1n) / 2n;
 function monster(floor) {
@@ -37,41 +40,10 @@ function monster(floor) {
     gold: (5n + floor * 3n) * (boss ? 3n : 1n)
   };
 }
-const hitsPerKill = enemy => (enemy.hp + attack() - 1n) / attack();
 const heroMax = () => 54n + 6n * game.level;
-let floor, foe, hp, hero, challenge, nextTurn, effect;
-function enter(number, trying = false, now = Date.now()) {
-  floor = number;
-  foe = monster(floor);
-  hp = foe.hp;
-  hero = heroMax();
-  challenge = trying;
-  nextTurn = now + turnMs;
-}
+let floor = 1n, foe = monster(floor), hp = foe.hp, hero = heroMax(), challenge = false, effect;
 function say(message) { byId('message').textContent = message; }
-function catchUp(now) {
-  const floor = farmingFloor();
-  const enemy = monster(floor);
-  const turns = BigInt(Math.floor(Math.max(0, now - game.at) / turnMs));
-  const hits = hitsPerKill(enemy);
-  const total = turns + BigInt(game.paid);
-  const kills = total / hits;
-  game.paid = Number(total % hits);
-  game.gold += kills * enemy.gold;
-  if (kills && !game.best) game.best = 1n;
-  game.at = Math.min(now, game.at + Number(turns) * turnMs);
-  return kills * enemy.gold;
-}
-function resume() {
-  const now = Date.now();
-  const reward = catchUp(now);
-  if (reward) say('쉬는 동안 자동 사냥으로 +' + fmt(reward) + ' 골드를 모았어요.');
-  enter(farmingFloor(), false, now);
-  hp -= BigInt(game.paid) * attack();
-  nextTurn = game.at + turnMs;
-  save();
-  render();
-}
+
 function render() {
   const target = game.best + 1n;
   for (const [id, value] of Object.entries({
@@ -85,59 +57,99 @@ function render() {
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / heroMax()) + '%';
   byId('enemy-bar').style.width = Number(hp * 100n / foe.hp) + '%';
-  byId('upgrade').disabled = game.gold < cost();
-  byId('challenge').disabled = challenge || !game.best;
+  byId('upgrade').disabled = !connected || inFlight || challenge || game.gold < cost();
+  byId('challenge').disabled = !connected || inFlight || challenge || !game.best;
+  byId('copy-save').disabled = pendingCreate;
 }
-function tick(now) {
-  nextTurn = now + turnMs;
-  game.at = now;
-  const hit = attack();
-  effect = { at: performance.now(), hit, gold: 0n };
-  hp = hp > hit ? hp - hit : 0n;
-  if (!challenge) game.paid++;
-  if (!hp) {
-    game.gold += foe.gold;
-    game.paid = 0;
-    effect.gold = foe.gold;
-    if (floor > game.best) {
-      game.best = floor;
-      say(fmt(floor) + '층 클리어! 이 층에서 자동으로 골드를 모아요.');
-    }
-    enter(floor, false, now);
-  } else if (challenge) {
-    hero -= foe.damage;
-    if (hero <= 0n) {
-      say(fmt(floor) + '층에서 패배했어요. ' + fmt(game.best) + '층에서 다시 골드를 모아요.');
-      enter(farmingFloor(), false, now);
-      hp -= BigInt(game.paid) * attack();
-    }
+
+function updateFromServer(data, returning) {
+  const previousHp = hp;
+  const previousFloor = floor;
+  game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best), revision: data.revision };
+  floor = BigInt(data.floor);
+  foe = monster(floor);
+  hp = BigInt(data.hp);
+  hero = BigInt(data.hero);
+  challenge = data.challenge;
+  const reward = BigInt(data.reward);
+  if (!returning && (reward || (floor === previousFloor && hp < previousHp))) {
+    effect = { at: performance.now(), hit: attack(), gold: reward };
   }
-  save();
-  render();
+  if (returning && reward) say('쉬는 동안 +' + fmt(reward) + ' 골드를 모았어요.');
+  else if (data.result === 'won') say(fmt(game.best) + '층 클리어! 이 층에서 골드를 모아요.');
+  else if (data.result === 'lost') say('도전에 실패했어요. ' + fmt(game.best) + '층에서 사냥을 재개해요.');
+  else if (data.result === 'challenging') say(fmt(floor) + '층 도전! 기사가 자동으로 싸워요.');
+  else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
+  else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
+  else if (!lastSync) say('슬라임을 쓰러뜨리고 골드를 모아요.');
 }
-byId('upgrade').onclick = () => {
-  if (game.gold < cost()) return;
-  game.gold -= cost();
-  game.level++;
-  game.paid = 0;
-  if (!challenge) hp = foe.hp;
-  hero += 6n;
-  say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
-  save();
+
+async function synchronize(action = 'sync', restoreCode = null) {
+  if (inFlight) return;
+  clearTimeout(scheduled);
+  inFlight = true;
   render();
+  const returning = !lastSync || performance.now() - lastSync > 8000;
+  const priorConnection = connected;
+  try {
+    const command = !restoreCode && pendingCreate ? 'create' : action;
+    const data = await play(restoreCode ?? saveCode, command, game.revision);
+    if (restoreCode) saveCode = restoreCode;
+    pendingCreate = false;
+    remember();
+    updateFromServer(data, returning && !restoreCode);
+    connected = true;
+    lastSync = performance.now();
+    byId('save-status').textContent = '저장됨';
+    if (restoreCode) {
+      say('저장한 던전 진행을 불러왔어요.');
+      byId('save-message').textContent = '저장을 불러왔어요.';
+      byId('save-input').value = '';
+    }
+  } catch (error) {
+    connected = restoreCode && priorConnection;
+    if (restoreCode) byId('save-message').textContent = error.message;
+    else {
+      byId('save-status').textContent = '재연결 중';
+      say('서버 연결을 확인하고 다시 시도할게요.');
+    }
+  } finally {
+    inFlight = false;
+    render();
+    if (!document.hidden) scheduled = setTimeout(synchronize, connected ? (challenge ? 1050 : 2100) : 5000);
+  }
+}
+
+byId('upgrade').onclick = () => synchronize('upgrade');
+byId('challenge').onclick = () => synchronize('challenge');
+byId('copy-save').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(saveCode);
+    byId('save-message').textContent = '저장 코드를 복사했어요.';
+  } catch {
+    byId('save-input').value = saveCode;
+    byId('save-input').select();
+    byId('save-message').textContent = '선택된 코드를 직접 복사하세요.';
+  }
 };
-byId('challenge').onclick = () => {
-  if (!game.best || challenge) return;
-  enter(game.best + 1n, true);
-  say(fmt(floor) + '층 도전! 기사가 자동으로 싸워요.');
-  render();
+byId('restore-save').onsubmit = event => {
+  event.preventDefault();
+  const code = byId('save-input').value.trim().toLowerCase();
+  if (!validCode(code)) {
+    byId('save-message').textContent = '64자리 저장 코드를 입력하세요.';
+    return;
+  }
+  if (inFlight) {
+    byId('save-message').textContent = '저장이 끝나면 다시 눌러 주세요.';
+    return;
+  }
+  synchronize('sync', code);
 };
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) save();
-  else resume();
+  if (document.hidden) clearTimeout(scheduled);
+  else synchronize();
 });
-window.addEventListener('pagehide', save);
-window.addEventListener('pageshow', event => { if (event.persisted) resume(); });
+window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); });
 
 const canvas = byId('scene');
 const ctx = canvas.getContext('2d');
@@ -172,7 +184,6 @@ function torch(x, t) {
   rect(x + 17, 70, 3, 6, '#ffebaa');
 }
 function draw(t) {
-  if (!document.hidden && Date.now() >= nextTurn) tick(Date.now());
   const age = effect ? t - effect.at : Infinity;
   const impact = age < 155 && !reduced.matches;
   const ambientTime = reduced.matches ? 0 : t;
@@ -219,5 +230,5 @@ function draw(t) {
   }
   requestAnimationFrame(draw);
 }
-resume();
+synchronize();
 requestAnimationFrame(draw);

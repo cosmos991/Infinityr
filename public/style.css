@@ -30,3 +30,14 @@ canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background
 footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:22px;border:1px solid var(--line);background:#1e192d;text-align:center}
 footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1px solid var(--line)}
 @media(max-width:420px){main{width:calc(100% - 24px)}.actions,.combatants{gap:8px}.combatants{padding:10px}.actions button{padding:8px;gap:6px}.wallet{gap:7px;padding:7px}}
+
+.save-panel{margin-top:16px;padding:12px 14px;background:#1e192d;border:1px solid var(--line)}
+.save-panel summary{cursor:pointer;font-size:.9rem;font-weight:700}
+#save-status{float:right;color:#b9eeaa;font-weight:400}
+.save-panel p,.save-panel label{display:block;color:var(--muted);font-size:.875rem;margin:8px 0}
+.save-controls{display:flex;gap:8px}
+.save-controls input{min-width:0;flex:1}
+.save-controls input,.save-controls button{border:1px solid #8b71ad;background:#2c223d;color:#f0e1ff;padding:8px;font:inherit;font-size:.875rem}
+.save-controls button{cursor:pointer}
+.save-controls button:disabled{opacity:.65;cursor:default}
+#save-message:empty{display:none}

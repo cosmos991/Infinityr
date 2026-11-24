@@ -7,7 +7,7 @@
 <meta name="description" content="꼬마 기사와 함께 내려가는 무한 픽셀 던전">
 <title>슬라임 지하굴</title>
 <link rel="stylesheet" href="style.css">
-<script src="game.js" defer></script>
+<script type="module" src="game.js"></script>
 </head>
 <body>
 <main>
@@ -26,6 +26,16 @@
 <button id="challenge"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">다음 층 도전</strong><small id="target">2층</small></span></button>
 </section>
 <footer><div><small>검 레벨</small><strong id="level">1</strong></div><div><small>공격력</small><strong id="attack">8</strong></div><div><small>최고 클리어</small><strong id="best">—</strong></div></footer>
+<details class="save-panel">
+<summary>서버 저장 <span id="save-status">연결 중</span></summary>
+<p>저장 코드를 보관하면 다른 기기에서도 이어서 할 수 있어요. 이 코드로 저장에 접근할 수 있으니 개인적으로 보관하세요.</p>
+<div class="save-controls"><button type="button" id="copy-save">저장 코드 복사</button></div>
+<form id="restore-save">
+<label for="save-input">다른 기기의 저장 코드</label>
+<div class="save-controls"><input id="save-input" name="code" spellcheck="false" autocapitalize="none" autocomplete="off" required><button>이어 하기</button></div>
+</form>
+<p id="save-message" role="status"></p>
+</details>
 </main>
 </body>
 </html>
