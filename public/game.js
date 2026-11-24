@@ -280,8 +280,9 @@ function drawEnemy(age, impact, t) {
   const collapsing = defeated && age < 90;
   const enemy = collapsing ? defeated : foe;
   const scale = enemy.boss ? 5 : 3;
-  const counter = !reduced.matches && age < 300 ? effect?.counter : null;
-  const pulse = counter ? Math.sin(Math.PI * Math.max(0, age) / 300) : 0;
+  const counterAge = age - (counterDelay - strikeWindup);
+  const counter = !reduced.matches && counterAge >= 0 && counterAge < 300 ? effect?.counter : null;
+  const pulse = counter ? Math.sin(Math.PI * counterAge / 300) : 0;
   const lunge = counter?.motion === 'lunge' ? pulse * 32 : 0;
   const jump = counter?.motion === 'slam' ? pulse * 18 : 0;
   const x = 263 - 12 * scale + (impact && !defeated ? 5 : 0) - lunge;
@@ -324,9 +325,78 @@ function drawCounter(age) {
   ctx.restore();
 }
 
+const strikeWindup = 85;
+const counterDelay = 215;
+const strikePoses = [
+  // Milliseconds, horizontal offset, lift, and lean in radians.
+  [0, 0, 0, 0],
+  [strikeWindup, -9, 1, -0.09],
+  [150, 31, 6, 0.15],
+  [215, 25, 2, 0.08],
+  [385, 0, 0, 0]
+];
+
+function lunaPose(age, time, tookHit) {
+  const breath = Math.sin(time / 390);
+  let pose = { x: 0, lift: 0, lean: 0, height: 94 + breath * 1.2 };
+  const next = strikePoses.findIndex(([at]) => age < at);
+  if (next > 0) {
+    const [start, x, lift, lean] = strikePoses[next - 1];
+    const [end, toX, toLift, toLean] = strikePoses[next];
+    const t = (age - start) / (end - start);
+    const blend = t * t * (3 - 2 * t);
+    pose = { x: x + (toX - x) * blend, lift: lift + (toLift - lift) * blend,
+      lean: lean + (toLean - lean) * blend, height: 94 };
+  }
+  if (tookHit && age >= counterDelay && age < counterDelay + 180) {
+    const recoil = Math.sin(Math.PI * (age - counterDelay) / 180);
+    pose.x -= recoil * 16;
+    pose.lean -= recoil * 0.15;
+    pose.height -= recoil * 3;
+  }
+  return pose;
+}
+
+function drawLuna(age, time) {
+  const pose = lunaPose(reduced.matches ? Infinity : age, time, Boolean(effect?.counter));
+  const x = 117 + pose.x;
+  rect(x - 20, 117, 47, 6, '#14121e');
+  if (!luna.naturalWidth) return;
+
+  const width = pose.height * luna.naturalWidth / luna.naturalHeight;
+  ctx.save();
+  ctx.translate(x, 120 - pose.lift);
+  ctx.rotate(pose.lean);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(luna, -width / 2, -pose.height, width, pose.height);
+  ctx.restore();
+}
+
+function drawSwordSweep(age) {
+  if (reduced.matches || age < 0 || age >= 150) return;
+  const progress = age / 150;
+  const x = 157 + 28 * progress;
+  ctx.save();
+  ctx.globalAlpha = 1 - progress;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, 47);
+  ctx.quadraticCurveTo(x + 61, 43, x + 53, 98);
+  ctx.lineWidth = 9 - 5 * progress;
+  ctx.strokeStyle = '#c7a6f3';
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#fff5dc';
+  ctx.stroke();
+  rect(x + 57, 67, 4, 4, '#fff0c7');
+  rect(x + 45, 52, 3, 3, '#fff0c7');
+  ctx.restore();
+}
+
 function draw(t) {
   const age = effect ? t - effect.at : Infinity;
-  const impact = age < 155 && !reduced.matches;
+  const hitAge = age >= strikeWindup ? age - strikeWindup : Infinity;
+  const impact = hitAge < 115 && !reduced.matches;
   const ambientTime = reduced.matches ? 0 : t;
   rect(0, 0, 384, 160, '#151120');
   for (let row = 0; row < 7; row++) {
@@ -347,27 +417,16 @@ function draw(t) {
     rect(x + 8, 131, 21, 2, '#1e1928');
     rect(x + 2, 146, 16, 2, '#242033');
   }
-  const lunaHeight = 94;
-  const lunaX = 70 + (impact ? 28 : 0);
-  const lunaY = 120 - lunaHeight - (Math.floor(ambientTime / 350) % 4 === 1 ? 1 : 0);
-  rect(lunaX + 27, 117, 47, 6, '#14121e');
   rect(231, 118, 64, 5, '#14121e');
-  if (luna.naturalWidth) {
-    const width = Math.round(lunaHeight * luna.naturalWidth / luna.naturalHeight);
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(luna, lunaX, lunaY, width, lunaHeight);
-  }
-  drawEnemy(age, impact, ambientTime);
-  drawCounter(age);
-  if (age < 560) {
-    if (impact) {
-      rect(198, 72, 22, 3, '#fff3cd');
-      rect(205, 68, 12, 2, '#fff3cd');
-    }
+  drawLuna(age, ambientTime);
+  drawEnemy(hitAge, impact, ambientTime);
+  drawSwordSweep(hitAge);
+  drawCounter(age - counterDelay);
+  if (hitAge < 560) {
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = effect.gold ? '#ffd482' : '#fff1fa';
-    ctx.fillText(effect.gold ? '+' + fmt(effect.gold) + ' G' : '−' + fmt(effect.hit), 262, 54 - (reduced.matches ? 0 : age / 24));
+    ctx.fillText(effect.gold ? '+' + fmt(effect.gold) + ' G' : '−' + fmt(effect.hit), 262, 54 - (reduced.matches ? 0 : hitAge / 24));
   }
   requestAnimationFrame(draw);
 }
