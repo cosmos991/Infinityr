@@ -49,6 +49,7 @@ function monster(floor, boss = false) {
 }
 let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
 let victory;
+let bossJustBecameWinnable = false;
 function say(message, highlight = false) {
   byId('message').textContent = message;
   byId('message').parentElement.dataset.highlight = String(highlight);
@@ -66,6 +67,8 @@ function bossForecast(floor, power, maxHealth) {
 function render() {
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
+  const newlyWinnable = bossJustBecameWinnable && preview.canWin && !challenge;
+  const forecastLabel = newlyWinnable ? '지금 이길 수 있어요' : preview.canWin ? '승리 예상' : '강화 필요';
   const forecast = byId('boss-forecast');
   forecast.hidden = !connected || challenge;
   forecast.dataset.canWin = String(preview.canWin);
@@ -77,7 +80,7 @@ function render() {
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
-    'boss-forecast': (preview.canWin ? '승리 예상' : '강화 필요') + ' · 처치까지 ' +
+    'boss-forecast': forecastLabel + ' · 처치까지 ' +
       fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존'
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
@@ -92,7 +95,9 @@ function render() {
   upgrade.dataset.ready = String(ready);
   upgrade.disabled = busy || challenge || !ready;
   byId('vitality').disabled = busy || challenge || game.gold < game.vitalityCost;
-  byId('challenge').disabled = busy || challenge;
+  const challengeButton = byId('challenge');
+  challengeButton.classList.toggle('newly-winnable', newlyWinnable);
+  challengeButton.disabled = busy || challenge;
   byId('copy-save').disabled = pendingCreate;
   byId('reset-save').disabled = busy;
 }
@@ -111,6 +116,15 @@ function updateFromServer(data, returning) {
   maxEnemy = BigInt(data.maxEnemy);
   hero = BigInt(data.hero);
   challenge = data.challenge;
+  if (floor !== previousFloor || challenge) {
+    bossJustBecameWinnable = false;
+  } else if (!returning && (data.result === 'upgraded' || data.result === 'vitality_upgraded')) {
+    const priorAttack = data.result === 'upgraded' ? attack() - 4n : attack();
+    const priorHealth = data.result === 'vitality_upgraded' ? game.maxHero - 15n : game.maxHero;
+    if (!bossForecast(floor, priorAttack, priorHealth).canWin && bossForecast(floor, attack(), game.maxHero).canWin) {
+      bossJustBecameWinnable = true;
+    }
+  }
   const reward = BigInt(data.reward);
   const counter = previousFoe.boss && (data.result === 'lost' || (challenge && hero < previousHero));
   if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
@@ -183,6 +197,7 @@ async function synchronize(action = 'sync', targetCode = null) {
     if (targetCode) {
       effect = undefined;
       victory = undefined;
+      bossJustBecameWinnable = false;
       const message = action === 'create'
         ? '진행을 초기화했어요. 1층에서 새로 시작해요.'
         : '저장한 던전 진행을 불러왔어요.';
