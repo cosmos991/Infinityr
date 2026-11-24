@@ -1,0 +1,32 @@
+:root{color-scheme:dark;font-family:system-ui,sans-serif;color:#f1eadb;background:#100e1b;--muted:#b3a7c4;--line:#403652;--gold:#ffd482}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#261c38 0,transparent 65%),#100e1b}
+main{width:min(100% - 32px,48rem);margin:auto;padding:clamp(24px,6vh,64px) 0}
+header,.battle-top,.name{display:flex;justify-content:space-between;align-items:center;gap:12px}
+header{margin-bottom:20px}
+h1,h2,p{margin:0}h1{font-size:clamp(1.55rem,5vw,2.3rem);letter-spacing:-.055em}
+small{display:block;font-size:.875rem;color:var(--muted)}
+.eyebrow{font:bold .78rem monospace;letter-spacing:.25em;color:#cfadee}
+.wallet{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:#261f34;padding:9px 13px}
+.wallet strong{color:var(--gold);overflow-wrap:anywhere}
+.coin{width:15px;height:17px;background:#f6bb5f;border:3px solid #ac6a38;box-shadow:inset 3px 0 #ffe696}
+.battle{border:2px solid #5d496f;background:#1b1729;box-shadow:0 5px #0b0913}
+.battle-top{padding:13px 17px;border-bottom:2px solid #382b48}
+.battle-top h2{font-size:1.65rem}
+.mode{color:#b9eeaa;background:#253b32;border:1px solid #4d6b56;padding:5px 9px;font-size:.875rem;white-space:nowrap}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#131120}
+.combatants,.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.combatants{padding:12px 16px 16px}
+.name{align-items:baseline;flex-wrap:wrap;gap:3px 8px;font-size:.875rem;margin-bottom:6px}
+.name small{font-size:.78rem}
+.track{height:9px;background:#393047}.track div{height:100%;width:100%;background:#8cd88b}.track #enemy-bar{background:#ee859a}
+.status{min-height:3.5rem;display:flex;align-items:center;color:#dcc5ee;font-size:.92rem;padding:8px 2px}
+.actions button{font:inherit;text-align:left;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:65px;border:2px solid #a67b40;background:#4c3425;color:#ffe3ae;box-shadow:0 4px #211722;cursor:pointer;overflow-wrap:anywhere}
+.actions button:last-child{background:#3d2e56;border-color:#8b71ad;color:#f0e1ff}
+.actions button:disabled{opacity:.65;cursor:default}
+.actions button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.actions button:not(:disabled):hover{filter:brightness(1.23)}
+.icon{font:1.5rem monospace}.actions small{color:inherit;margin-top:2px}
+footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:22px;border:1px solid var(--line);background:#1e192d;text-align:center}
+footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1px solid var(--line)}
+@media(max-width:420px){main{width:calc(100% - 24px)}.actions,.combatants{gap:8px}.combatants{padding:10px}.actions button{padding:8px;gap:6px}.wallet{gap:7px;padding:7px}}
