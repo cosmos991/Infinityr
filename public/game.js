@@ -48,6 +48,7 @@ function monster(floor, boss = false) {
   return { boss, zone, monarch };
 }
 let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
+let victory;
 function say(message, highlight = false) {
   byId('message').textContent = message;
   byId('message').parentElement.dataset.highlight = String(highlight);
@@ -97,6 +98,7 @@ function render() {
 }
 
 function updateFromServer(data, returning) {
+  const previousBest = game.best;
   const previousHp = hp;
   const previousHero = hero;
   const previousFoe = foe;
@@ -118,7 +120,12 @@ function updateFromServer(data, returning) {
     };
   }
   if (returning) return;
-  else if (data.result === 'won') say(fmt(floor) + '층 해금! ' + (challenge ? '보스 자동 도전 중이에요.' : '새 층에서 자동 사냥을 시작했어요.'), true);
+  if (game.best > previousBest) {
+    victory = { at: performance.now(), hit: attack(), gold: reward,
+      defeated: monster(game.best, true) };
+    byId('clear-banner').textContent = fmt(game.best) + '층 클리어!';
+  }
+  if (data.result === 'won') say(fmt(floor) + '층 해금! ' + (challenge ? '보스 자동 도전 중이에요.' : '새 층에서 자동 사냥을 시작했어요.'), true);
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
   else if (data.result === 'upgraded') {
@@ -175,6 +182,7 @@ async function synchronize(action = 'sync', targetCode = null) {
     byId('save-status').textContent = '저장됨';
     if (targetCode) {
       effect = undefined;
+      victory = undefined;
       const message = action === 'create'
         ? '진행을 초기화했어요. 1층에서 새로 시작해요.'
         : '저장한 던전 진행을 불러왔어요.';
@@ -273,8 +281,9 @@ const fragments = [
   [-36,-11,3], [28,-14,4], [6,-24,3]
 ];
 
-function drawEnemy(age, impact, t) {
-  const defeated = !reduced.matches && effect?.defeated;
+function drawEnemy(age, impact, t, activeEffect, celebrating) {
+  const defeated = !reduced.matches && activeEffect?.defeated;
+  if (celebrating && !reduced.matches && age >= 380) return;
   if (defeated && age >= 90 && age < 380) {
     const progress = (age - 90) / 290;
     const spread = defeated.boss ? 1.35 : 1;
@@ -294,7 +303,7 @@ function drawEnemy(age, impact, t) {
   const enemy = collapsing ? defeated : foe;
   const scale = enemy.boss ? 5 : 3;
   const counterAge = age - (counterDelay - strikeWindup);
-  const counter = !reduced.matches && counterAge >= 0 && counterAge < 300 ? effect?.counter : null;
+  const counter = !reduced.matches && counterAge >= 0 && counterAge < 300 ? activeEffect?.counter : null;
   const pulse = counter ? Math.sin(Math.PI * counterAge / 300) : 0;
   const lunge = counter?.motion === 'lunge' ? pulse * 32 : 0;
   const jump = counter?.motion === 'slam' ? pulse * 18 : 0;
@@ -317,8 +326,8 @@ function drawEnemy(age, impact, t) {
   ctx.restore();
 }
 
-function drawCounter(age) {
-  const counter = effect?.counter;
+function drawCounter(age, activeEffect) {
+  const counter = activeEffect?.counter;
   if (!counter || reduced.matches || age < 0 || age >= 360 || counter.motion === 'lunge') return;
   const progress = age / 360;
   ctx.save();
@@ -370,8 +379,8 @@ function lunaPose(age, time, tookHit) {
   return pose;
 }
 
-function drawLuna(age, time) {
-  const pose = lunaPose(reduced.matches ? Infinity : age, time, Boolean(effect?.counter));
+function drawLuna(age, time, activeEffect) {
+  const pose = lunaPose(reduced.matches ? Infinity : age, time, Boolean(activeEffect?.counter));
   const x = 117 + pose.x;
   rect(x - 20, 117, 47, 6, '#14121e');
   if (!luna.naturalWidth) return;
@@ -407,10 +416,17 @@ function drawSwordSweep(age) {
 }
 
 function draw(t) {
-  const age = effect ? t - effect.at : Infinity;
-  const hitAge = age >= strikeWindup ? age - strikeWindup : Infinity;
-  const impact = hitAge < 115 && !reduced.matches;
-  const ambientTime = reduced.matches ? 0 : t;
+  const victoryAge = victory ? t - victory.at : Infinity;
+  const celebrating = victoryAge >= 0 && victoryAge < 1200;
+  const banner = byId('clear-banner');
+  const showBanner = celebrating && (reduced.matches || victoryAge >= 355);
+  if (banner.hidden === showBanner) banner.hidden = !showBanner;
+  const activeEffect = celebrating ? victory : effect;
+  let age = activeEffect ? t - activeEffect.at : Infinity;
+  if (celebrating && !reduced.matches && age >= 125) age = Math.max(125, age - 90);
+  const hitAge = age - strikeWindup;
+  const impact = hitAge >= 0 && hitAge < 115 && !reduced.matches;
+  const ambientTime = reduced.matches ? 0 : celebrating ? t - (victoryAge - age) : t;
   rect(0, 0, 384, 160, '#151120');
   for (let row = 0; row < 7; row++) {
     for (let column = -1; column < 13; column++) {
@@ -431,15 +447,15 @@ function draw(t) {
     rect(x + 2, 146, 16, 2, '#242033');
   }
   rect(231, 118, 64, 5, '#14121e');
-  drawLuna(age, ambientTime);
-  drawEnemy(hitAge, impact, ambientTime);
+  drawLuna(age, ambientTime, activeEffect);
+  drawEnemy(hitAge, impact, ambientTime, activeEffect, celebrating);
   drawSwordSweep(hitAge);
-  drawCounter(age - counterDelay);
-  if (hitAge < 560) {
+  drawCounter(age - counterDelay, activeEffect);
+  if (hitAge >= 0 && hitAge < 560) {
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = effect.gold ? '#ffd482' : '#fff1fa';
-    ctx.fillText(effect.gold ? '+' + fmt(effect.gold) + ' G' : '−' + fmt(effect.hit), 262, 54 - (reduced.matches ? 0 : hitAge / 24));
+    ctx.fillStyle = activeEffect.gold ? '#ffd482' : '#fff1fa';
+    ctx.fillText(activeEffect.gold ? '+' + fmt(activeEffect.gold) + ' G' : '−' + fmt(activeEffect.hit), 262, 54 - (reduced.matches ? 0 : hitAge / 24));
   }
   requestAnimationFrame(draw);
 }

@@ -75,3 +75,12 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
   #upgrade-fill{transition:none}
   #upgrade[data-ready="true"] .upgrade-track{animation:none}
 }
+
+.battle-scene{position:relative}
+.clear-banner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1;pointer-events:none;white-space:nowrap;padding:.35em .8em;background:#25182f;border:2px solid #f8cb79;color:#ffe5a8;font-size:clamp(1.25rem,5vw,2.35rem);font-weight:900;box-shadow:0 4px #100e1b,0 0 24px #eaae6750}
+.clear-banner:not([hidden]){animation:clear-banner-in .22s ease-out}
+@keyframes clear-banner-in{
+  from{opacity:0;transform:translate(-50%,-45%) scale(.9)}
+  to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+}
+@media(prefers-reduced-motion:reduce){.clear-banner:not([hidden]){animation:none}}
