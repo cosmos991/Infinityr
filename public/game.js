@@ -65,6 +65,18 @@ function bossForecast(floor, power, maxHealth) {
   return { hits, survivable, canWin: hits <= survivable + 1n };
 }
 
+function nextBossUpgrade(floor, power, maxHealth, swordCost, vitalityCost) {
+  const swordWins = bossForecast(floor, power + 4n, maxHealth + 6n).canWin;
+  const vitalityWins = bossForecast(floor, power, maxHealth + 15n).canWin;
+  if (swordWins && (!vitalityWins || swordCost <= vitalityCost)) {
+    return '검을 한 번 강화하면 이길 수 있어요 · ' + fmt(swordCost) + '골드';
+  }
+  if (vitalityWins) {
+    return '체력을 한 번 강화하면 이길 수 있어요 · ' + fmt(vitalityCost) + '골드 · 추가 설정';
+  }
+  return '';
+}
+
 function render() {
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
@@ -75,6 +87,11 @@ function render() {
   const forecast = byId('boss-forecast');
   forecast.hidden = !connected || challenge;
   forecast.dataset.canWin = String(preview.canWin);
+  const tip = byId('boss-tip');
+  const recommendation = forecast.hidden || preview.canWin ? ''
+    : nextBossUpgrade(floor, attack(), game.maxHero, game.swordCost, game.vitalityCost);
+  tip.hidden = !recommendation;
+  tip.textContent = recommendation;
   for (const [id, value] of Object.entries({
     gold: fmt(shownGold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
@@ -83,7 +100,7 @@ function render() {
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
-    'boss-forecast': forecastLabel + ' · 처치까지 ' +
+    'boss-forecast-text': forecastLabel + ' · 처치까지 ' +
       fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존'
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';

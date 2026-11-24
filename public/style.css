@@ -93,3 +93,5 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
   35%{background:#46664e;box-shadow:0 0 16px #aeedafaa}
   100%{background:#3d2e56;box-shadow:0 4px #211722}
 }
+
+.boss-forecast small:not([hidden]){margin-top:5px;color:#ffe1aa;font-weight:600}
