@@ -30,7 +30,7 @@ function remember() {
   } catch {}
 }
 remember();
-let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, vitalityCost: 25n, autoBoss: false, pending: false, revision: null };
+let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 25n, autoBoss: false, pending: false, revision: null };
 let inFlight = false;
 let connected = false;
 let scheduled;
@@ -41,7 +41,6 @@ const fmt = number => number >= 1000000n
   ? number.toString()[0] + '.' + number.toString().slice(1, 3) + 'e' + (number.toString().length - 1)
   : number.toLocaleString('ko-KR');
 const attack = () => game.level * 4n + 4n;
-const cost = () => 18n + 12n * game.level + game.level * (game.level - 1n) / 2n;
 function monster(floor, boss = false) {
   const zone = places[Number(((floor - 1n) / 10n) % 3n)];
   const decade = floor / 10n;
@@ -49,7 +48,10 @@ function monster(floor, boss = false) {
   return { boss, zone, monarch };
 }
 let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
-function say(message) { byId('message').textContent = message; }
+function say(message, highlight = false) {
+  byId('message').textContent = message;
+  byId('message').parentElement.dataset.highlight = String(highlight);
+}
 
 function bossForecast(floor, power, maxHealth) {
   // Match the server's floor_bosses combat, including Luna attacking first.
@@ -70,7 +72,7 @@ function render() {
     gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
     'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(maxEnemy),
-    cost: fmt(cost()) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
+    cost: fmt(game.swordCost) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
@@ -82,7 +84,7 @@ function render() {
   const busy = !connected || inFlight || game.pending;
   byId('auto-boss').checked = game.autoBoss;
   byId('auto-boss').disabled = busy;
-  byId('upgrade').disabled = busy || challenge || game.gold < cost();
+  byId('upgrade').disabled = busy || challenge || game.gold < game.swordCost;
   byId('vitality').disabled = busy || challenge || game.gold < game.vitalityCost;
   byId('challenge').disabled = busy || challenge;
   byId('copy-save').disabled = pendingCreate;
@@ -95,7 +97,7 @@ function updateFromServer(data, returning) {
   const previousFoe = foe;
   const previousFloor = floor;
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
-    maxHero: BigInt(data.maxHero), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, pending: data.pending, revision: data.revision };
+    maxHero: BigInt(data.maxHero), swordCost: BigInt(data.swordCost), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, pending: data.pending, revision: data.revision };
   floor = BigInt(data.floor);
   foe = monster(floor, data.challenge);
   hp = BigInt(data.hp);
@@ -111,10 +113,16 @@ function updateFromServer(data, returning) {
     };
   }
   if (returning) return;
-  else if (data.result === 'won') say(fmt(game.best) + '층 보스 처치! ' + fmt(floor) + '층으로 이동했어요.');
+  else if (data.result === 'won') say(fmt(floor) + '층 해금! ' + (challenge ? '보스 자동 도전 중이에요.' : '새 층에서 자동 사냥을 시작했어요.'), true);
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
-  else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
+  else if (data.result === 'upgraded') {
+    const before = bossForecast(floor, attack() - 4n, game.maxHero).hits;
+    const after = bossForecast(floor, attack(), game.maxHero).hits;
+    say(before > after
+      ? '검 강화! 보스 처치까지 ' + fmt(before) + '타 → ' + fmt(after) + '타'
+      : '검 강화! 공격력 ' + fmt(attack()) + ' (+4)', true);
+  }
   else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
   else if (data.result === 'auto_on') say('이길 수 있는 보스에 자동으로 도전해요.');
   else if (data.result === 'auto_off') say('보스 자동 도전을 껐어요.');

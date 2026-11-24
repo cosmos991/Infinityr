@@ -22,15 +22,20 @@
 </section>
 <div class="status" role="status"><span id="message">슬라임을 사냥하고 보스를 쓰러뜨리면 다음 층이 열려요.</span></div>
 <section class="actions" aria-label="전투 조작">
-<button id="upgrade"><span class="icon sword" aria-hidden="true">⚔</span><span><strong>검 강화</strong><small id="cost">30 골드</small></span></button>
-<button id="vitality"><span class="icon" aria-hidden="true">♥</span><span><strong>체력 강화</strong><small id="vitality-cost">25 골드</small></span></button>
+<button id="upgrade"><span class="icon sword" aria-hidden="true">⚔</span><span><strong>검 강화</strong><small id="cost">6 골드</small></span></button>
 <button id="challenge" aria-describedby="boss-forecast"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">보스 도전</strong><small id="target">1층 왕슬라임</small></span></button>
 </section>
 <p id="boss-forecast" class="boss-forecast" hidden></p>
+<details class="extra-options">
+<summary>추가 설정</summary>
+<div class="actions secondary-actions">
+<button id="vitality"><span class="icon" aria-hidden="true">♥</span><span><strong>체력 강화</strong><small id="vitality-cost">25 골드</small></span></button>
+</div>
 <div class="auto-settings">
   <label for="auto-boss"><input type="checkbox" id="auto-boss" disabled> 보스 자동 도전</label>
   <small>이길 수 있는 보스만 도전해요.</small>
 </div>
+</details>
 <section id="return-summary" class="return-summary" aria-label="방치 결과" hidden>
   <p id="return-summary-text" role="status"></p>
   <button type="button" id="dismiss-summary">닫기</button>

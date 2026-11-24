@@ -22,7 +22,6 @@ canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background
 .track{height:9px;background:#393047}.track div{height:100%;width:100%;background:#8cd88b}.track #enemy-bar{background:#ee859a}
 .status{min-height:3.5rem;display:flex;align-items:center;color:#dcc5ee;font-size:.92rem;padding:8px 2px}
 .actions button{font:inherit;text-align:left;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:65px;border:2px solid #a67b40;background:#4c3425;color:#ffe3ae;box-shadow:0 4px #211722;cursor:pointer;overflow-wrap:anywhere}
-.actions{grid-template-columns:repeat(3,minmax(0,1fr))}
 .actions #vitality{background:#492b3d;border-color:#a8688c;color:#ffd7eb}
 .actions #challenge{background:#3d2e56;border-color:#8b71ad;color:#f0e1ff}
 .actions button:disabled{opacity:.65;cursor:default}
@@ -31,7 +30,6 @@ canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background
 .icon{font:1.5rem monospace}.actions small{color:inherit;margin-top:2px}
 footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:22px;border:1px solid var(--line);background:#1e192d;text-align:center}
 footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1px solid var(--line)}
-@media(max-width:480px){.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.actions #challenge{grid-column:1/-1}}
 @media(max-width:420px){main{width:calc(100% - 24px)}.actions,.combatants{gap:8px}.combatants{padding:10px}.actions button{padding:8px;gap:6px}.wallet{gap:7px;padding:7px}}
 
 .save-panel{margin-top:16px;padding:12px 14px;background:#1e192d;border:1px solid var(--line)}
@@ -57,3 +55,9 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 #auto-boss{width:1.15rem;height:1.15rem;accent-color:#ae83dc}
 .return-summary:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:10px;border-color:#65806c;color:#d0efce}
 .return-summary button{font:inherit;font-size:.875rem;padding:6px 10px;background:#2c3630;color:#d0efce;border:1px solid #65806c;cursor:pointer;flex-shrink:0}
+
+.extra-options{margin-top:12px}
+.extra-options summary{cursor:pointer;padding:8px 2px;color:var(--muted);font-size:.9rem}
+.secondary-actions{margin-top:8px}
+.secondary-actions button{min-height:50px}
+.status[data-highlight="true"]{color:#ffe2a3;font-weight:700}
