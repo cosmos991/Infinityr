@@ -3,9 +3,9 @@ import { play, newSaveCode } from './cloud.js';
 const byId = id => document.getElementById(id);
 const key = 'slime-hollow-cloud-v1';
 const places = [
-  ['이끼 동굴', '이끼 슬라임', '#91e6a1', '#29463e'],
-  ['자수정 광산', '수정 슬라임', '#d09bf9', '#423252'],
-  ['잿불 굴', '잿불 슬라임', '#ffa16f', '#502e38']
+  ['이끼 동굴', '이끼 슬라임', '#91e6a1', '#29463e', 'moss'],
+  ['자수정 광산', '수정 슬라임', '#d09bf9', '#423252', 'crystal'],
+  ['잿불 굴', '잿불 슬라임', '#ffa16f', '#502e38', 'ember']
 ];
 const crown = ['g...g...g','gg.gg.ggg','ggggggggg','gooooooog','ggggggggg'];
 const royalSlimes = [
@@ -415,6 +415,81 @@ function drawSwordSweep(age) {
   ctx.restore();
 }
 
+const dungeonPalettes = {
+  moss: ['#111c22','#202f32','#243639','#2b4141','#3c5850'],
+  crystal: ['#131229','#23213c','#2c2448','#40345f','#655480'],
+  ember: ['#21131d','#30202b','#3b252e','#513039','#805048']
+};
+const crystals = [
+  '......h.......','.....hhl......','.....hll......','..h..hll..h...',
+  '.hhb.hll.hhl..','.hlb.hlb.hlb..','.hlb.hlb.hlb..',
+  '..hbchlbhlb...','..cbchlbhlbc..','...cbbbcbbc...','...cccccccc...'
+];
+
+function crystalCluster(x, y, scale, time) {
+  const glow = ctx.createRadialGradient(x + 7 * scale, y + 5 * scale, 1,
+    x + 7 * scale, y + 5 * scale, 12 * scale);
+  glow.addColorStop(0, '#a277ff60');
+  glow.addColorStop(1, '#a277ff00');
+  rect(x - 5 * scale, y - 6 * scale, 24 * scale, 24 * scale, glow);
+  sprite(crystals, x, y, scale, {h:'#f2ddff',l:'#ba91ff',b:'#7156ba',c:'#49356c'});
+  const sparkle = Math.floor((time + x * 7) / 300) % 5;
+  rect(x + (2 + sparkle * 2) * scale, y - 5 - sparkle * 3, 2, 2, '#eadbff');
+}
+
+function drawDungeon(zone, time) {
+  const theme = zone[4];
+  const [base, stone, darkStone, edge, paving] = dungeonPalettes[theme];
+  rect(0, 0, 384, 160, base);
+  for (let row = 0; row < 7; row++) {
+    for (let column = -1; column < 13; column++) {
+      const x = column * 33 + (row % 2) * 16;
+      rect(x, row * 16, 31, 14, (column + row * 3) % 5 ? stone : darkStone);
+      rect(x + 1, row * 16 + 1, 29, 1, edge);
+    }
+  }
+
+  rect(156, 39, 72, 80, edge);
+  rect(163, 44, 58, 75, darkStone);
+  rect(171, 51, 42, 68, base);
+  rect(179, 57, 26, 62, '#0d0b14');
+
+  if (theme === 'moss') {
+    for (const x of [25, 323]) torch(x, time);
+    for (const x of [0, 67, 147, 300, 363]) {
+      rect(x, 15, 18, 4, '#37594c');
+      rect(x + 3, 19, 4, 13 + x % 8, '#37594c');
+      rect(x + 8, 22, 8, 3, '#53785e');
+    }
+  } else if (theme === 'crystal') {
+    crystalCluster(17, 55, 4, time);
+    crystalCluster(312, 49, 4, time);
+    crystalCluster(173, 12, 2, time);
+  } else {
+    for (let i = 0; i < 12; i++) {
+      const y = 112 - ((Math.floor(time / 34) + 17 * i) % 97);
+      rect((29 + i * 61) % 384, y, 2 + i % 2, 2, i % 3 ? '#cf674d' : '#fca163');
+    }
+  }
+
+  rect(0, 112, 384, 48, zone[3]);
+  for (let x = 0; x < 384; x += 25) {
+    rect(x, 115, 22, 3, paving);
+    rect(x + 8, 131, 21, 2, darkStone);
+    rect(x + 2, 146, 16, 2, base);
+  }
+  if (theme === 'ember') {
+    for (let i = 0; i < 16; i++) {
+      const x = i * 25 - 4;
+      const y = 138 + ((i * 7) % 3) * 3;
+      rect(x, y, 26, 6, '#a8403d');
+      rect(x, y + 2, 26, 2, '#f86d42');
+      const glint = (Math.floor(time / 60) + i * 7) % 23;
+      rect(x + glint, y + 2, 5, 1, '#ffbc66');
+    }
+  }
+}
+
 function draw(t) {
   const victoryAge = victory ? t - victory.at : Infinity;
   const celebrating = victoryAge >= 0 && victoryAge < 1200;
@@ -427,25 +502,7 @@ function draw(t) {
   const hitAge = age - strikeWindup;
   const impact = hitAge >= 0 && hitAge < 115 && !reduced.matches;
   const ambientTime = reduced.matches ? 0 : celebrating ? t - (victoryAge - age) : t;
-  rect(0, 0, 384, 160, '#151120');
-  for (let row = 0; row < 7; row++) {
-    for (let column = -1; column < 13; column++) {
-      const x = column * 33 + (row % 2) * 16;
-      rect(x, row * 16, 31, 14, (column + row * 3) % 5 ? '#20192c' : '#261c34');
-      rect(x + 1, row * 16 + 1, 29, 1, '#2a2237');
-    }
-  }
-  for (const x of [25, 323]) torch(x, ambientTime);
-  rect(156, 39, 72, 80, '#31273e');
-  rect(163, 44, 58, 75, '#221b2d');
-  rect(171, 51, 42, 68, '#100d19');
-  rect(179, 57, 26, 62, '#0d0b14');
-  rect(0, 112, 384, 48, foe.zone[3]);
-  for (let x = 0; x < 384; x += 25) {
-    rect(x, 115, 22, 3, '#766078');
-    rect(x + 8, 131, 21, 2, '#1e1928');
-    rect(x + 2, 146, 16, 2, '#242033');
-  }
+  drawDungeon((celebrating ? victory.defeated : foe).zone, ambientTime);
   rect(231, 118, 64, 5, '#14121e');
   drawLuna(age, ambientTime, activeEffect);
   drawEnemy(hitAge, impact, ambientTime, activeEffect, celebrating);
