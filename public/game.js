@@ -31,34 +31,30 @@ const fmt = number => number >= 1000000n
   : number.toLocaleString('ko-KR');
 const attack = () => game.level * 4n + 4n;
 const cost = () => 18n + 12n * game.level + game.level * (game.level - 1n) / 2n;
-function monster(floor) {
-  const boss = floor % 10n === 0n;
+function monster(floor, boss = false) {
   const zone = places[Number(((floor - 1n) / 10n) % 3n)];
   return {
-    boss, zone, hp: (12n + 12n * floor) * (boss ? 2n : 1n),
-    damage: 3n + floor * (boss ? 4n : 2n),
-    gold: (5n + floor * 3n) * (boss ? 3n : 1n)
+    boss, zone
   };
 }
-let floor = 1n, foe = monster(floor), hp = foe.hp, hero = game.maxHero, challenge = false, effect;
+let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
 function say(message) { byId('message').textContent = message; }
 
 function render() {
-  const target = game.best + 1n;
   for (const [id, value] of Object.entries({
     gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
-    mode: challenge ? '층 공략 중' : '자동 사냥', enemy: foe.boss ? '왕슬라임' : foe.zone[1],
-    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(foe.hp),
+    mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? '왕슬라임' : foe.zone[1],
+    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(maxEnemy),
     cost: fmt(cost()) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
-    'challenge-label': challenge ? '도전 중' : '다음 층 도전',
-    target: challenge ? fmt(floor) + '층' : fmt(target) + '층'
+    'challenge-label': challenge ? '도전 중' : '보스 도전',
+    target: fmt(floor) + '층 왕슬라임'
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
-  byId('enemy-bar').style.width = Number(hp * 100n / foe.hp) + '%';
+  byId('enemy-bar').style.width = Number(hp * 100n / maxEnemy) + '%';
   byId('upgrade').disabled = !connected || inFlight || challenge || game.gold < cost();
   byId('vitality').disabled = !connected || inFlight || challenge || game.gold < game.vitalityCost;
-  byId('challenge').disabled = !connected || inFlight || challenge || !game.best;
+  byId('challenge').disabled = !connected || inFlight || challenge;
   byId('copy-save').disabled = pendingCreate;
   byId('reset-save').disabled = !connected || inFlight;
 }
@@ -70,25 +66,26 @@ function updateFromServer(data, returning) {
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
     maxHero: BigInt(data.maxHero), vitalityCost: BigInt(data.vitalityCost), revision: data.revision };
   floor = BigInt(data.floor);
-  foe = monster(floor);
+  foe = monster(floor, data.challenge);
   hp = BigInt(data.hp);
+  maxEnemy = BigInt(data.maxEnemy);
   hero = BigInt(data.hero);
   challenge = data.challenge;
   const reward = BigInt(data.reward);
-  if (!returning && (reward || (floor === previousFloor && hp < previousHp))) {
+  if (!returning && (reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
       at: performance.now(), hit: attack(), gold: reward,
-      defeated: reward ? (data.result === 'lost' ? foe : previousFoe) : null
+      defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
     };
   }
   if (returning && reward) say('쉬는 동안 +' + fmt(reward) + ' 골드를 모았어요.');
-  else if (data.result === 'won') say(fmt(game.best) + '층 클리어! 이 층에서 골드를 모아요.');
-  else if (data.result === 'lost') say('도전에 실패했어요. ' + fmt(game.best) + '층에서 사냥을 재개해요.');
-  else if (data.result === 'challenging') say(fmt(floor) + '층 도전! 기사가 자동으로 싸워요.');
+  else if (data.result === 'won') say(fmt(game.best) + '층 보스 처치! ' + fmt(floor) + '층으로 이동했어요.');
+  else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
+  else if (data.result === 'challenging') say(fmt(floor) + '층 왕슬라임에게 도전해요.');
   else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
   else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
   else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
-  else if (!lastSync) say('슬라임을 쓰러뜨리고 골드를 모아요.');
+  else if (!lastSync) say('슬라임을 사냥하고 보스를 쓰러뜨리면 다음 층이 열려요.');
 }
 
 async function synchronize(action = 'sync', targetCode = null) {
