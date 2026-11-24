@@ -7,6 +7,16 @@ const places = [
   ['자수정 광산', '수정 슬라임', '#d09bf9', '#423252'],
   ['잿불 굴', '잿불 슬라임', '#ffa16f', '#502e38']
 ];
+const crown = ['g...g...g','gg.gg.ggg','ggggggggg','gooooooog','ggggggggg'];
+const royalSlimes = [
+  { name:'왕슬라임', color:null, accent:'#ffd276', crest:crown, motion:'lunge' },
+  { name:'수정 왕슬라임', color:'#d59bff', accent:'#e6baff',
+    crest:['..g...g..','.ggg.ggg.','ogggggggo','.oggoggo.','..ooooo..'], motion:'shards' },
+  { name:'잿불 왕슬라임', color:'#ff956a', accent:'#ffc36b',
+    crest:['....g....','..g.gg..g','.ggggoggg','ggoggoggg','.ggggggg.'], motion:'embers' },
+  { name:'이끼 왕슬라임', color:'#92e2a3', accent:'#d5f4a0',
+    crest:['g.......g','gg..g..gg','.ggggggg.','..gogog..','..ggggg..'], motion:'slam' }
+];
 let stored = null;
 try {
   stored = JSON.parse(localStorage.getItem(key));
@@ -33,22 +43,38 @@ const attack = () => game.level * 4n + 4n;
 const cost = () => 18n + 12n * game.level + game.level * (game.level - 1n) / 2n;
 function monster(floor, boss = false) {
   const zone = places[Number(((floor - 1n) / 10n) % 3n)];
-  return {
-    boss, zone
-  };
+  const decade = floor / 10n;
+  const monarch = decade ? royalSlimes[1 + Number((decade - 1n) % 3n)] : royalSlimes[0];
+  return { boss, zone, monarch };
 }
 let floor = 1n, foe = monster(floor), hp = 24n, maxEnemy = 24n, hero = game.maxHero, challenge = false, effect;
 function say(message) { byId('message').textContent = message; }
 
+function bossForecast(floor, power, maxHealth) {
+  // Match the server's floor_bosses combat, including Luna attacking first.
+  const bossHealth = 24n + 24n * floor;
+  const bossDamage = 3n + 4n * floor;
+  const hits = (bossHealth + power - 1n) / power;
+  const survivable = (maxHealth - 1n) / bossDamage;
+  return { hits, survivable, canWin: hits <= survivable + 1n };
+}
+
 function render() {
+  const preview = bossForecast(floor, attack(), game.maxHero);
+  const bossName = foe.monarch.name;
+  const forecast = byId('boss-forecast');
+  forecast.hidden = !connected || challenge;
+  forecast.dataset.canWin = String(preview.canWin);
   for (const [id, value] of Object.entries({
     gold: fmt(game.gold), floor: fmt(floor), biome: foe.zone[0],
-    mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? '왕슬라임' : foe.zone[1],
+    mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
     'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(hp) + ' / ' + fmt(maxEnemy),
     cost: fmt(cost()) + ' 골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
-    target: fmt(floor) + '층 왕슬라임'
+    target: fmt(floor) + '층 ' + bossName,
+    'boss-forecast': (preview.canWin ? '승리 예상' : '강화 필요') + ' · 처치까지 ' +
+      fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존'
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
   byId('enemy-bar').style.width = Number(hp * 100n / maxEnemy) + '%';
@@ -61,6 +87,7 @@ function render() {
 
 function updateFromServer(data, returning) {
   const previousHp = hp;
+  const previousHero = hero;
   const previousFoe = foe;
   const previousFloor = floor;
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
@@ -72,16 +99,17 @@ function updateFromServer(data, returning) {
   hero = BigInt(data.hero);
   challenge = data.challenge;
   const reward = BigInt(data.reward);
-  if (!returning && (reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
+  const counter = previousFoe.boss && (data.result === 'lost' || (challenge && hero < previousHero));
+  if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
-      at: performance.now(), hit: attack(), gold: reward,
+      at: performance.now(), hit: attack(), gold: reward, counter: counter ? previousFoe.monarch : null,
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
     };
   }
   if (returning && reward) say('쉬는 동안 +' + fmt(reward) + ' 골드를 모았어요.');
   else if (data.result === 'won') say(fmt(game.best) + '층 보스 처치! ' + fmt(floor) + '층으로 이동했어요.');
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
-  else if (data.result === 'challenging') say(fmt(floor) + '층 왕슬라임에게 도전해요.');
+  else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
   else if (data.result === 'upgraded') say('검을 강화했어요. 공격력 ' + fmt(attack()) + ' (+4)');
   else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
   else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
@@ -213,7 +241,7 @@ function drawEnemy(age, impact, t) {
     fragments.forEach(([dx, dy, size], index) => {
       const x = 263 + dx * spread * (0.38 + progress);
       const y = 108 + dy * progress * spread + 24 * progress ** 2;
-      const color = index % 4 === 0 ? (defeated.boss ? '#ffd276' : '#f3fff0') : defeated.zone[2];
+      const color = index % 4 === 0 ? (defeated.boss ? defeated.monarch.accent : '#f3fff0') : defeated.zone[2];
       rect(x, y, size, size, color);
     });
     ctx.restore();
@@ -223,8 +251,12 @@ function drawEnemy(age, impact, t) {
   const collapsing = defeated && age < 90;
   const enemy = collapsing ? defeated : foe;
   const scale = enemy.boss ? 5 : 3;
-  const x = 263 - 12 * scale + (impact && !defeated ? 5 : 0);
-  const y = 120 - slime.length * scale - (Math.floor(t / 200) % 4 === 1 ? 2 : 0);
+  const counter = !reduced.matches && age < 300 ? effect?.counter : null;
+  const pulse = counter ? Math.sin(Math.PI * Math.max(0, age) / 300) : 0;
+  const lunge = counter?.motion === 'lunge' ? pulse * 32 : 0;
+  const jump = counter?.motion === 'slam' ? pulse * 18 : 0;
+  const x = 263 - 12 * scale + (impact && !defeated ? 5 : 0) - lunge;
+  const y = 120 - slime.length * scale - (Math.floor(t / 200) % 4 === 1 ? 2 : 0) - jump;
   ctx.save();
   if (collapsing) {
     ctx.translate(0, 120);
@@ -234,10 +266,31 @@ function drawEnemy(age, impact, t) {
     ctx.globalAlpha = (age - 380) / 130;
   }
   sprite(slime, x, y, scale, {
-    o:'#242138', m:impact ? '#f9e8ff' : enemy.zone[2], d:'#496572', h:'#f3fff0', p:'#f8b4c5'
+    o:'#242138', m:impact ? '#f9e8ff' : (enemy.boss && enemy.monarch.color) || enemy.zone[2], d:'#496572', h:'#f3fff0', p:'#f8b4c5'
   });
   if (enemy.boss) {
-    sprite(['g...g...g','gg.gg.ggg','ggggggggg','gooooooog','ggggggggg'], x + 37, y - 13, 5, {g:'#ffd276',o:'#a6614f'});
+    sprite(enemy.monarch.crest, x + 37, y - 13, 5, {g:enemy.monarch.accent,o:'#674659'});
+  }
+  ctx.restore();
+}
+
+function drawCounter(age) {
+  const counter = effect?.counter;
+  if (!counter || reduced.matches || age < 0 || age >= 360 || counter.motion === 'lunge') return;
+  const progress = age / 360;
+  ctx.save();
+  ctx.globalAlpha = 1 - progress;
+  for (let i = 0; i < 6; i++) {
+    const x = 251 - (115 + 12 * i) * progress;
+    if (counter.motion === 'shards') {
+      rect(x, 57 + 8 * i, 9, 3, counter.accent);
+      rect(x + 4, 54 + 8 * i, 3, 9, '#fff0ff');
+    } else if (counter.motion === 'embers') {
+      const y = 108 - 5 * i - 38 * Math.sin(Math.PI * progress);
+      rect(x, y, 5 + i % 3, 5 + i % 3, i % 2 ? '#ff7853' : counter.accent);
+    } else {
+      rect(x - 9 * i, 112 - (i % 2) * 3, 10 + i, 4, counter.accent);
+    }
   }
   ctx.restore();
 }
@@ -276,6 +329,7 @@ function draw(t) {
     ctx.drawImage(luna, lunaX, lunaY, width, lunaHeight);
   }
   drawEnemy(age, impact, ambientTime);
+  drawCounter(age);
   if (age < 560) {
     if (impact) {
       rect(198, 72, 22, 3, '#fff3cd');

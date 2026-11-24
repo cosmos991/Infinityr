@@ -24,8 +24,9 @@
 <section class="actions" aria-label="전투 조작">
 <button id="upgrade"><span class="icon sword" aria-hidden="true">⚔</span><span><strong>검 강화</strong><small id="cost">30 골드</small></span></button>
 <button id="vitality"><span class="icon" aria-hidden="true">♥</span><span><strong>체력 강화</strong><small id="vitality-cost">25 골드</small></span></button>
-<button id="challenge"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">보스 도전</strong><small id="target">1층 왕슬라임</small></span></button>
+<button id="challenge" aria-describedby="boss-forecast"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">보스 도전</strong><small id="target">1층 왕슬라임</small></span></button>
 </section>
+<p id="boss-forecast" class="boss-forecast" hidden></p>
 <footer><div><small>검 레벨</small><strong id="level">1</strong></div><div><small>공격력</small><strong id="attack">8</strong></div><div><small>최고 클리어</small><strong id="best">—</strong></div></footer>
 <details class="save-panel">
 <summary>서버 저장 <span id="save-status">연결 중</span></summary>

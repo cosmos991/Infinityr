@@ -47,3 +47,6 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 
 .reset-controls{margin-top:12px}
 .reset-controls button{color:#ffd5db;border-color:#a76b80;background:#46283a}
+
+.boss-forecast{margin-top:14px;padding:8px 10px;border-left:3px solid #b589b6;background:#251c34;color:#f1d7ec;font-size:.875rem}
+.boss-forecast[data-can-win="true"]{border-color:#85bf9d;color:#c1f0d0}
