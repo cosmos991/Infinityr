@@ -173,27 +173,59 @@ const canvas = byId('scene');
 const ctx = canvas.getContext('2d');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const luna = [
-  '......oooo..........',
-  '.....ohhhho.........',
-  '...oohHHhhho........',
-  '..ohhoHhhffo........',
-  '..oHhophfffFo.......',
-  '.ohhhohhfofFo.......',
-  '.ohhoooffffFo.......',
-  '..oo..offFFo........',
-  '.....oovooo......l..',
-  '....ovVvsoo.....ll..',
-  '...ovVvssSo....lLo..',
-  '..ovVvvSssso..lLo...',
-  '..ovvvvvSsooolLo....',
-  '..ovVvvvosfflLo.....',
-  '.ovVvvvoossoggo.....',
-  '.ovvvvoosssooo......',
-  '..ovvooosoo.........',
-  '...oo.ososo.........',
-  '......os.oso........',
-  '.....ooo..ooo.......',
-  '.....ooo..ooo.......'
+  '........ooooooo',
+  '......ooRRRRrrroo',
+  '....ooRRLLRRRrrrro',
+  '...oRRLLLLLRRRrRrro',
+  '..oRRLLLRRRRRrRrCrro',
+  '..oRLRRFFFFFFFRrGrro',
+  '.oRRRrFFffffFFFRrro',
+  '.oRRroFFfffffFFRrro',
+  '..oRroFweFFweFFRro',
+  '..oRroFieFFieFFRro',
+  '..oRrroFpfFFFpFRro',
+  '...oRRroFFFmFFFro',
+  '...oRrroFFFFFForo',
+  '....oRrrooffoorro',
+  '....oRrrvVgoSoRro',
+  '...oRrrvVVSSssorro',
+  '...orrvVVSWWsSSofo',
+  '..orovVVvSWWsSSofFo',
+  '...ovVVVvSssSSofoo',
+  '...ovVVvvogggoooo',
+  '..ovVVvvvsSsSSoo',
+  '..ovVvvvSssosSso',
+  '.ovVVvvoSSsoSSso',
+  '.ovvvvooSWsoSWso',
+  '..ooovooSssoSsso',
+  '.....ooooWWooWWo',
+  '........oooooooo'
+];
+const lunaPalette = {
+  o:'#21172e', R:'#e69bab', L:'#ffccd1', r:'#ac5c82',
+  C:'#fff3b1', G:'#e9b664', F:'#ffe1c3', f:'#f4bc9d',
+  w:'#fffaf4', e:'#47304b', i:'#7752a4', p:'#ed95a5', m:'#bc6b7e',
+  v:'#7450b0', V:'#b48cea', g:'#efbc67',
+  s:'#65769f', S:'#a4b8da', W:'#e5effa'
+};
+const lunaSword = [
+  '..............o',
+  '.............oWo',
+  '............oWWo',
+  '...........oWSo',
+  '..........oWSo',
+  '.........oWSo',
+  '........oWSo',
+  '.......oWSo',
+  '......oWSo',
+  '.....oWSo',
+  '....oWSo',
+  '..ooWSo',
+  '.oGgGo',
+  '..oGgo',
+  '.oCoGgo',
+  'oGooGo',
+  'oo..oo'
 ];
 const slime = [
   '........................','........ooooooo.........','......oommmmmmmoo.......',
@@ -286,13 +318,12 @@ function draw(t) {
     rect(x + 8, 131, 21, 2, '#1e1928');
     rect(x + 2, 146, 16, 2, '#242033');
   }
-  rect(86, 118, 61, 5, '#14121e');
+  const lunaX = 79 + (impact ? 30 : 0);
+  const lunaY = 39 - (Math.floor(ambientTime / 350) % 4 === 1 ? 1 : 0);
+  rect(lunaX + 9, 117, 53, 6, '#14121e');
   rect(231, 118, 64, 5, '#14121e');
-  sprite(luna, 87 + (impact ? 28 : 0), 57, 3, {
-    o:'#21152e', h:'#a84b6c', H:'#ee8a9a', p:'#c7a3fa',
-    f:'#efae89', F:'#ffcea5', v:'#633b98', V:'#b887f1',
-    s:'#60749c', S:'#a6bce5', l:'#e8f5ff', L:'#9fc9ed', g:'#f0bd70'
-  });
+  sprite(luna, lunaX, lunaY, 3, lunaPalette);
+  sprite(lunaSword, lunaX + 45, lunaY + 12, 3, lunaPalette);
   drawEnemy(age, impact, ambientTime);
   if (age < 560) {
     if (impact) {
