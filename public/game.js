@@ -115,6 +115,11 @@ function renderConstellations(busy) {
 function render() {
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
+  const displayedMaxHero = game.fightMaxHero ?? game.maxHero;
+  const displayedAttack = game.fightAttack ?? attack();
+  const queued = byId('queued-upgrade');
+  queued.hidden = !challenge || (displayedAttack === attack() && displayedMaxHero === game.maxHero);
+  queued.textContent = queued.hidden ? '' : '전투 종료 후 적용 · 공격력 ' + fmt(attack()) + ' · 최대 체력 ' + fmt(game.maxHero);
   const job = jobs[game.job];
   const jobName = byId('job-name');
   jobName.hidden = !job;
@@ -135,15 +140,15 @@ function render() {
   for (const [id, value] of Object.entries({
     gold: fmt(shownGold), floor: fmt(floor), biome: foe.zone[0],
     mode: challenge ? '보스전' : '자동 사냥', enemy: foe.boss ? bossName : foe.zone[1],
-    'hero-hp': fmt(hero) + ' / ' + fmt(game.maxHero), 'enemy-hp': fmt(shownHp) + ' / ' + fmt(maxEnemy),
-    cost: fmt(shownGold) + ' / ' + fmt(game.swordCost) + '골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(attack()),
+    'hero-hp': fmt(hero) + ' / ' + fmt(displayedMaxHero), 'enemy-hp': fmt(shownHp) + ' / ' + fmt(maxEnemy),
+    cost: fmt(shownGold) + ' / ' + fmt(game.swordCost) + '골드', 'vitality-cost': fmt(game.vitalityCost) + ' 골드', level: fmt(game.level), attack: fmt(displayedAttack),
     best: game.best ? fmt(game.best) + '층' : '—',
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
     'boss-forecast-text': forecastLabel + ' · 처치까지 ' +
       fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존' + (job ? ' · 기본 공격 기준' : '')
   })) byId(id).textContent = value;
-  byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
+  byId('hero-bar').style.width = Number(hero * 100n / displayedMaxHero) + '%';
   byId('enemy-bar').style.width = Number(shownHp * 100n / maxEnemy) + '%';
   const busy = !connected || inFlight || game.pending;
   renderConstellations(busy);
@@ -156,9 +161,9 @@ function render() {
   const funded = ready ? game.swordCost : shownGold;
   byId('upgrade-fill').style.width = Number(funded * 1000n / game.swordCost) / 10 + '%';
   upgrade.dataset.ready = String(ready);
-  upgrade.disabled = upgradeHold?.action !== 'upgrade' && (busy || challenge || !ready);
+  upgrade.disabled = upgradeHold?.action !== 'upgrade' && (busy || !ready);
   byId('vitality').disabled = upgradeHold?.action !== 'vitality' &&
-    (busy || challenge || shownGold < game.vitalityCost);
+    (busy || shownGold < game.vitalityCost);
   const challengeButton = byId('challenge');
   challengeButton.classList.toggle('newly-winnable', newlyWinnable);
   challengeButton.disabled = busy || challenge;
@@ -169,6 +174,7 @@ function render() {
 function updateFromServer(data, returning, animateFarming = false) {
   const previousGold = game.gold;
   const previousPower = attack();
+  const previousFightAttack = game.fightAttack;
   const previousMaxHero = game.maxHero;
   const previousBest = game.best;
   const previousHp = hp;
@@ -177,6 +183,8 @@ function updateFromServer(data, returning, animateFarming = false) {
   const previousFloor = floor;
   game = { stars: data.stars ? Object.fromEntries(Object.entries(data.stars).map(([key, value]) => [key, BigInt(value)])) : zeroStars,
     starOffer: data.starOffer ?? [], starFloor: BigInt(data.starFloor ?? 0), power: BigInt(data.attackPower ?? 4n * BigInt(data.level) + 4n),
+    fightAttack: data.fightAttack == null ? null : BigInt(data.fightAttack),
+    fightMaxHero: data.fightMaxHero == null ? null : BigInt(data.fightMaxHero),
     vitalityRank: BigInt(data.vitalityRank ?? 0), gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
     maxHero: BigInt(data.maxHero), swordCost: BigInt(data.swordCost), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, job: data.job, pending: data.pending, revision: data.revision };
   floor = BigInt(data.floor);
@@ -203,7 +211,7 @@ function updateFromServer(data, returning, animateFarming = false) {
   if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
       at: farmImpact?.phase === 'windup' ? farmImpact.at : performance.now(),
-      hit: attack() * BigInt(data.skill?.struck ? 1 + data.skill.bonus : 1),
+      hit: (previousFoe.boss ? (previousFightAttack ?? previousPower) : (game.fightAttack ?? attack())) * BigInt(data.skill?.struck ? 1 + data.skill.bonus : 1),
       combo: data.skill?.struck ? data.skill.bonus : 0,
       gold: reward, counter: counter ? previousFoe.monarch : null,
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
@@ -218,13 +226,16 @@ function updateFromServer(data, returning, animateFarming = false) {
   }
   if (returning) return;
   if (game.best > previousBest) {
-    victory = { at: performance.now(), hit: attack(), gold: reward,
+    victory = { at: performance.now(), hit: previousFightAttack ?? previousPower, gold: reward,
       defeated: monster(game.best, true) };
     byId('clear-banner').textContent = fmt(game.best) + '층 클리어!';
   }
   if (data.result === 'won') say(fmt(floor) + '층 해금! ' + (challenge ? '보스 자동 도전 중이에요.' : '새 층에서 자동 사냥을 시작했어요.'), true);
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
+  else if (challenge && (data.result === 'upgraded' || data.result === 'vitality_upgraded')) {
+    say((data.result === 'upgraded' ? '검' : '체력') + ' 강화! 보스전이 끝나면 적용돼요.', true);
+  }
   else if (data.result === 'upgraded') {
     const before = bossForecast(floor, powerAt(game.level - 1n), healthAt(game.level - 1n, game.vitalityRank)).hits;
     const after = bossForecast(floor, attack(), game.maxHero).hits;
@@ -339,7 +350,7 @@ function endUpgradeHold(hold) {
 for (const [action, result] of [['upgrade', 'upgraded'], ['vitality', 'vitality_upgraded']]) {
   const button = byId(action);
   let suppressClick = false;
-  const canUpgrade = () => connected && !game.pending && !challenge &&
+  const canUpgrade = () => connected && !game.pending &&
     game.gold >= (action === 'upgrade' ? game.swordCost : game.vitalityCost);
 
   async function repeat(hold) {
