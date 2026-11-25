@@ -38,6 +38,7 @@ const constellations = {
 };
 let game = { stars: zeroStars, starOffer: [], power: 8n, vitalityRank: 0n, gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 12n, autoBoss: false, pending: false, revision: null };
 let inFlight = false;
+let upgradeHold;
 let connected = false;
 let scheduled;
 const jobs = {
@@ -155,8 +156,9 @@ function render() {
   const funded = ready ? game.swordCost : shownGold;
   byId('upgrade-fill').style.width = Number(funded * 1000n / game.swordCost) / 10 + '%';
   upgrade.dataset.ready = String(ready);
-  upgrade.disabled = busy || challenge || !ready;
-  byId('vitality').disabled = busy || challenge || game.gold < game.vitalityCost;
+  upgrade.disabled = upgradeHold?.action !== 'upgrade' && (busy || challenge || !ready);
+  byId('vitality').disabled = upgradeHold?.action !== 'vitality' &&
+    (busy || challenge || shownGold < game.vitalityCost);
   const challengeButton = byId('challenge');
   challengeButton.classList.toggle('newly-winnable', newlyWinnable);
   challengeButton.disabled = busy || challenge;
@@ -295,6 +297,7 @@ async function synchronize(action = 'sync', targetCode = null) {
       byId('save-message').textContent = message;
       byId('save-input').value = '';
     }
+    return data.result;
   } catch (error) {
     connected = Boolean(targetCode && priorConnection);
     if (targetCode) {
@@ -326,8 +329,63 @@ for (const id of ['rps', 'muk']) {
 }
 byId('auto-boss').onchange = event => synchronize(event.target.checked ? 'auto_on' : 'auto_off');
 byId('dismiss-summary').onclick = () => { byId('return-summary').hidden = true; };
-byId('upgrade').onclick = () => synchronize('upgrade');
-byId('vitality').onclick = () => synchronize('vitality');
+function endUpgradeHold(hold) {
+  if (upgradeHold !== hold) return;
+  clearTimeout(hold.timer);
+  upgradeHold = undefined;
+  render();
+}
+
+for (const [action, result] of [['upgrade', 'upgraded'], ['vitality', 'vitality_upgraded']]) {
+  const button = byId(action);
+  let suppressClick = false;
+  const canUpgrade = () => connected && !game.pending && !challenge &&
+    game.gold >= (action === 'upgrade' ? game.swordCost : game.vitalityCost);
+
+  async function repeat(hold) {
+    if (upgradeHold !== hold) return;
+    suppressClick = true;
+    if (!canUpgrade()) return;
+    if (inFlight) {
+      hold.timer = setTimeout(() => repeat(hold), 100);
+      return;
+    }
+    const outcome = await synchronize(action);
+    if (upgradeHold === hold && outcome === result && canUpgrade()) {
+      hold.timer = setTimeout(() => repeat(hold), 135);
+    }
+  }
+
+  button.onpointerdown = event => {
+    if (!event.isPrimary || event.button !== 0 || upgradeHold || !canUpgrade()) return;
+    suppressClick = false;
+    const hold = { action, pointer: event.pointerId };
+    upgradeHold = hold;
+    button.setPointerCapture(event.pointerId);
+    hold.timer = setTimeout(() => repeat(hold), 400);
+  };
+
+  button.onpointerup = event => {
+    if (upgradeHold?.action === action && upgradeHold.pointer === event.pointerId) endUpgradeHold(upgradeHold);
+  };
+  button.onpointercancel = button.onlostpointercapture = button.onpointerup;
+  button.onpointermove = event => {
+    if (upgradeHold?.action !== action || upgradeHold.pointer !== event.pointerId) return;
+    const box = button.getBoundingClientRect();
+    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) {
+      suppressClick = true;
+      endUpgradeHold(upgradeHold);
+    }
+  };
+  button.oncontextmenu = event => { if (upgradeHold?.action === action) event.preventDefault(); };
+  button.onclick = event => {
+    if (event.detail > 0 && suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    if (canUpgrade()) synchronize(action);
+  };
+}
 byId('challenge').onclick = () => synchronize('challenge');
 byId('copy-save').onclick = async () => {
   try {
@@ -359,9 +417,13 @@ byId('restore-save').onsubmit = event => {
   synchronize('sync', code);
 };
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) clearTimeout(scheduled);
+  if (document.hidden) {
+    if (upgradeHold) endUpgradeHold(upgradeHold);
+    clearTimeout(scheduled);
+  }
   else synchronize();
 });
+window.addEventListener('blur', () => { if (upgradeHold) endUpgradeHold(upgradeHold); });
 window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); });
 
 const canvas = byId('scene');
