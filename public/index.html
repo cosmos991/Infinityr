@@ -16,14 +16,23 @@
 <div class="battle-top"><div><small id="biome">이끼 동굴</small><h2><span id="floor">1</span>층</h2></div><span class="mode" id="mode">자동 사냥</span></div>
 <div class="battle-scene">
 <canvas width="384" height="160" id="scene" aria-label="기사 루나와 슬라임의 픽셀 전투"></canvas>
+<p id="skill-banner" class="skill-banner" aria-hidden="true" hidden></p>
 <p id="clear-banner" class="clear-banner" aria-hidden="true" hidden></p>
 </div>
 <div class="combatants">
-<div><div class="name"><strong>기사 루나</strong><small id="hero-hp">60 / 60</small></div><div class="track"><div id="hero-bar"></div></div></div>
+<div><div class="name"><strong>기사 루나 <span id="job-name" class="job-name" hidden></span></strong><small id="hero-hp">60 / 60</small></div><div class="track"><div id="hero-bar"></div></div></div>
 <div><div class="name"><strong id="enemy">이끼 슬라임</strong><small id="enemy-hp">24 / 24</small></div><div class="track"><div id="enemy-bar"></div></div></div>
 </div>
 </section>
 <div class="status" role="status"><span id="message">슬라임을 사냥하고 보스를 쓰러뜨리면 다음 층이 열려요.</span></div>
+<section id="job-choices" class="job-choices" aria-label="2차 전직" hidden>
+<h2>루나의 2차 전직</h2>
+<p>10층을 클리어했어요! 두 직업 중 하나를 골라 주세요.</p>
+<div class="actions">
+<button type="button" id="job-rps"><span><strong>가위바위보 전사</strong><small>한 판 승부에서 이기면 다음 공격 2배</small></span></button>
+<button type="button" id="job-muk"><span><strong>묵찌빠 전사</strong><small>공격권을 잡고 손을 맞추면 다음 공격 3연타</small></span></button>
+</div>
+</section>
 <section class="actions" aria-label="전투 조작">
 <button id="upgrade"><span class="icon sword" aria-hidden="true">⚔</span><span class="upgrade-label"><strong>검 강화</strong><small id="cost">0 / 6골드</small><span class="upgrade-track" aria-hidden="true"><span id="upgrade-fill"></span></span></span></button>
 <button id="challenge" aria-describedby="boss-forecast"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">보스 도전</strong><small id="target">1층 왕슬라임</small></span></button>

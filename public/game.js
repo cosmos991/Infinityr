@@ -34,6 +34,13 @@ let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalit
 let inFlight = false;
 let connected = false;
 let scheduled;
+const jobs = {
+  rps: { name: '가위바위보 전사', color: '#97dbff' },
+  muk: { name: '묵찌빠 전사', color: '#ffabca' }
+};
+const handIcons = ['✊', '✋', '✌️'];
+let skillEffect;
+let lastSkillId;
 let lastSync = 0;
 let catchUp = null;
 
@@ -80,6 +87,11 @@ function nextBossUpgrade(floor, power, maxHealth, swordCost, vitalityCost) {
 function render() {
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
+  const job = jobs[game.job];
+  const jobName = byId('job-name');
+  jobName.hidden = !job;
+  jobName.textContent = job?.name ?? '';
+  byId('job-choices').hidden = !connected || game.best < 10n || Boolean(job);
   const shownGold = farmImpact?.phase === 'windup' ? farmImpact.gold : game.gold;
   const shownHp = farmImpact?.phase === 'windup' ? farmImpact.hp : farmImpact ? 0n : hp;
   const newlyWinnable = bossJustBecameWinnable && preview.canWin && !challenge;
@@ -101,11 +113,13 @@ function render() {
     'challenge-label': challenge ? '도전 중' : '보스 도전',
     target: fmt(floor) + '층 ' + bossName,
     'boss-forecast-text': forecastLabel + ' · 처치까지 ' +
-      fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존'
+      fmt(preview.hits) + '회 공격 · 피격 ' + fmt(preview.survivable) + '회 생존' + (job ? ' · 기본 공격 기준' : '')
   })) byId(id).textContent = value;
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
   byId('enemy-bar').style.width = Number(shownHp * 100n / maxEnemy) + '%';
   const busy = !connected || inFlight || game.pending;
+  byId('job-rps').disabled = busy || challenge;
+  byId('job-muk').disabled = busy || challenge;
   byId('auto-boss').checked = game.autoBoss;
   byId('auto-boss').disabled = busy;
   const upgrade = byId('upgrade');
@@ -130,7 +144,7 @@ function updateFromServer(data, returning, animateFarming = false) {
   const previousFoe = foe;
   const previousFloor = floor;
   game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
-    maxHero: BigInt(data.maxHero), swordCost: BigInt(data.swordCost), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, pending: data.pending, revision: data.revision };
+    maxHero: BigInt(data.maxHero), swordCost: BigInt(data.swordCost), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, job: data.job, pending: data.pending, revision: data.revision };
   floor = BigInt(data.floor);
   foe = monster(floor, data.challenge);
   hp = BigInt(data.hp);
@@ -156,9 +170,19 @@ function updateFromServer(data, returning, animateFarming = false) {
   const counter = previousFoe.boss && (data.result === 'lost' || (challenge && hero < previousHero));
   if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
-      at: farmImpact?.phase === 'windup' ? farmImpact.at : performance.now(), hit: attack(), gold: reward, counter: counter ? previousFoe.monarch : null,
+      at: farmImpact?.phase === 'windup' ? farmImpact.at : performance.now(),
+      hit: attack() * BigInt(data.skill?.struck ? 1 + data.skill.bonus : 1),
+      combo: data.skill?.struck ? data.skill.bonus : 0,
+      gold: reward, counter: counter ? previousFoe.monarch : null,
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
     };
+  }
+  if (!returning && data.skill && data.skill.id !== lastSkillId) {
+    lastSkillId = data.skill.id;
+    skillEffect = { ...data.skill, at: performance.now() };
+    const result = data.skill.winner === 1 ? (data.skill.job === 'rps' ? '다음 공격 2배!' : '다음 공격 3연타!')
+      : data.skill.winner === -1 ? '보스가 손 승부에서 이겼어요.' : '손 승부는 무승부예요.';
+    say(result, data.skill.winner === 1);
   }
   if (returning) return;
   if (game.best > previousBest) {
@@ -177,6 +201,7 @@ function updateFromServer(data, returning, animateFarming = false) {
       : '검 강화! 공격력 ' + fmt(attack()) + ' (+4)', true);
   }
   else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
+  else if (data.result === 'job_chosen') say('루나가 ' + jobs[game.job].name + '로 전직했어요!', true);
   else if (data.result === 'auto_on') say('이길 수 있는 보스에 자동으로 도전해요.');
   else if (data.result === 'auto_off') say('보스 자동 도전을 껐어요.');
   else if (data.result === 'stale') say('다른 탭이나 기기의 최신 진행을 불러왔어요.');
@@ -226,6 +251,8 @@ async function synchronize(action = 'sync', targetCode = null) {
     if (targetCode) {
       effect = undefined;
       victory = undefined;
+      skillEffect = undefined;
+      lastSkillId = undefined;
       bossJustBecameWinnable = false;
       const message = action === 'create'
         ? '진행을 초기화했어요. 1층에서 새로 시작해요.'
@@ -254,6 +281,12 @@ async function synchronize(action = 'sync', targetCode = null) {
   }
 }
 
+for (const id of ['rps', 'muk']) {
+  byId('job-' + id).onclick = () => {
+    if (inFlight || !window.confirm(jobs[id].name + '로 전직할까요? 전직은 한 번만 선택할 수 있어요.')) return;
+    synchronize('job_' + id);
+  };
+}
 byId('auto-boss').onchange = event => synchronize(event.target.checked ? 'auto_on' : 'auto_off');
 byId('dismiss-summary').onclick = () => { byId('return-summary').hidden = true; };
 byId('upgrade').onclick = () => synchronize('upgrade');
@@ -436,12 +469,16 @@ function drawLuna(age, time, activeEffect) {
   ctx.save();
   ctx.translate(x, 120 - pose.lift);
   ctx.rotate(pose.lean);
+  if (jobs[game.job]) {
+    ctx.shadowColor = jobs[game.job].color;
+    ctx.shadowBlur = 7;
+  }
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(luna, -width / 2, -pose.height, width, pose.height);
   ctx.restore();
 }
 
-function drawSwordSweep(age) {
+function drawSwordSweep(age, activeEffect) {
   if (reduced.matches || age < 0 || age >= 150) return;
   const progress = age / 150;
   const x = 157 + 28 * progress;
@@ -451,12 +488,22 @@ function drawSwordSweep(age) {
   ctx.beginPath();
   ctx.moveTo(x, 47);
   ctx.quadraticCurveTo(x + 61, 43, x + 53, 98);
-  ctx.lineWidth = 9 - 5 * progress;
+  ctx.lineWidth = (activeEffect?.combo === 1 ? 13 : 9) - 5 * progress;
   ctx.strokeStyle = '#c7a6f3';
   ctx.stroke();
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#fff5dc';
   ctx.stroke();
+  if (activeEffect?.combo === 2) {
+    for (const offset of [-12, 12]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 7, 47 + offset);
+      ctx.quadraticCurveTo(x + 52, 43 + offset, x + 45, 98 + offset);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffb9d4';
+      ctx.stroke();
+    }
+  }
   rect(x + 57, 67, 4, 4, '#fff0c7');
   rect(x + 45, 52, 3, 3, '#fff0c7');
   ctx.restore();
@@ -537,6 +584,26 @@ function drawDungeon(zone, time) {
   }
 }
 
+function drawHandDuel(time, celebrating) {
+  const banner = byId('skill-banner');
+  const elapsed = skillEffect ? time - skillEffect.at : Infinity;
+  const roundTime = reduced.matches ? 0 : 640 / (skillEffect?.rounds.length || 1);
+  banner.hidden = celebrating || elapsed < 0 || elapsed >= 1350;
+  if (banner.hidden) return;
+
+  const step = roundTime ? Math.floor(elapsed / roundTime) : skillEffect.rounds.length;
+  const final = step >= skillEffect.rounds.length;
+  const round = skillEffect.rounds[Math.min(step, skillEffect.rounds.length - 1)];
+  const hands = handIcons[round.luna] + '  대  ' + handIcons[round.boss];
+  const owner = round.owner > 0 ? '루나 공격권' : round.owner < 0 ? '보스 공격권' : '공격권 결정 중';
+  const result = skillEffect.winner === 1 ? (skillEffect.job === 'rps' ? '2배 타격!' : '3연타!')
+    : skillEffect.winner === -1 ? '보스 승' : '무승부';
+  const label = final ? result : skillEffect.job === 'muk' ? owner : '한 판 승부';
+  const text = hands + ' · ' + label;
+  if (banner.textContent !== text) banner.textContent = text;
+  banner.style.borderColor = jobs[skillEffect.job].color;
+}
+
 function draw(t) {
   if (farmImpact) {
     const elapsed = t - farmImpact.at;
@@ -551,6 +618,7 @@ function draw(t) {
   }
   const victoryAge = victory ? t - victory.at : Infinity;
   const celebrating = victoryAge >= 0 && victoryAge < 1200;
+  drawHandDuel(t, celebrating);
   const banner = byId('clear-banner');
   const showBanner = celebrating && (reduced.matches || victoryAge >= 355);
   if (banner.hidden === showBanner) banner.hidden = !showBanner;
@@ -564,7 +632,7 @@ function draw(t) {
   rect(231, 118, 64, 5, '#14121e');
   drawLuna(age, ambientTime, activeEffect);
   drawEnemy(hitAge, impact, ambientTime, activeEffect, celebrating);
-  drawSwordSweep(hitAge);
+  drawSwordSweep(hitAge, activeEffect);
   drawCounter(age - counterDelay, activeEffect);
   if (hitAge >= 0 && hitAge < 560) {
     ctx.font = 'bold 13px monospace';

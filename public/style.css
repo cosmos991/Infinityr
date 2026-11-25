@@ -95,3 +95,10 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 }
 
 .boss-forecast small:not([hidden]){margin-top:5px;color:#ffe1aa;font-weight:600}
+
+.job-choices{margin:12px 0;padding:12px;border:1px solid #9479ac;background:#2a2038}
+.job-choices h2{font-size:1.05rem;color:#f0dbff}
+.job-choices p{font-size:.9rem;color:#e2cfea;margin:5px 0 10px}
+.job-choices .actions button{min-height:58px}
+.job-name{color:#e2b5ff;font-size:.8rem}
+.skill-banner{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);white-space:nowrap;padding:.35em .7em;background:#1c1529eb;color:#fff5e7;border:1px solid #dfb7ff;font-size:clamp(.82rem,3vw,1.25rem);font-weight:750;pointer-events:none}
