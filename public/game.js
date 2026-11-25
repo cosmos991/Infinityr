@@ -30,7 +30,13 @@ function remember() {
   } catch {}
 }
 remember();
-let game = { gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 12n, autoBoss: false, pending: false, revision: null };
+const zeroStars = { sword: 0n, shield: 0n, lantern: 0n };
+const constellations = {
+  sword: { name: '검자리', stat: '공격력', percent: 2n },
+  shield: { name: '방패자리', stat: '최대 체력', percent: 3n },
+  lantern: { name: '등불자리', stat: '사냥·방치 골드', percent: 1n }
+};
+let game = { stars: zeroStars, starOffer: [], power: 8n, vitalityRank: 0n, gold: 0n, level: 1n, best: 0n, maxHero: 60n, swordCost: 6n, vitalityCost: 12n, autoBoss: false, pending: false, revision: null };
 let inFlight = false;
 let connected = false;
 let scheduled;
@@ -47,7 +53,10 @@ let catchUp = null;
 const fmt = number => number >= 1000000n
   ? number.toString()[0] + '.' + number.toString().slice(1, 3) + 'e' + (number.toString().length - 1)
   : number.toLocaleString('ko-KR');
-const attack = () => game.level * 4n + 4n;
+const attack = () => game.power;
+const withStars = (base, count, percent) => (base * (100n + count * percent) + 99n) / 100n;
+const powerAt = level => withStars(4n * level + 4n, game.stars.sword, 2n);
+const healthAt = (level, rank) => withStars(54n + 6n * level + 15n * rank, game.stars.shield, 3n);
 function monster(floor, boss = false) {
   const zone = places[Number(((floor - 1n) / 10n) % 3n)];
   const decade = floor / 10n;
@@ -72,9 +81,9 @@ function bossForecast(floor, power, maxHealth) {
   return { hits, survivable, canWin: hits <= survivable + 1n };
 }
 
-function nextBossUpgrade(floor, power, maxHealth, swordCost, vitalityCost) {
-  const swordWins = bossForecast(floor, power + 4n, maxHealth + 6n).canWin;
-  const vitalityWins = bossForecast(floor, power, maxHealth + 15n).canWin;
+function nextBossUpgrade(floor, power, swordCost, vitalityCost) {
+  const swordWins = bossForecast(floor, powerAt(game.level + 1n), healthAt(game.level + 1n, game.vitalityRank)).canWin;
+  const vitalityWins = bossForecast(floor, power, healthAt(game.level, game.vitalityRank + 1n)).canWin;
   if (swordWins && (!vitalityWins || swordCost <= vitalityCost)) {
     return '검을 한 번 강화하면 이길 수 있어요 · ' + fmt(swordCost) + '골드';
   }
@@ -82,6 +91,24 @@ function nextBossUpgrade(floor, power, maxHealth, swordCost, vitalityCost) {
     return '체력을 한 번 강화하면 이길 수 있어요 · ' + fmt(vitalityCost) + '골드 · 추가 설정';
   }
   return '';
+}
+
+function renderConstellations(busy) {
+  const showOffers = connected && game.starOffer.length > 0;
+  byId('star-choices').hidden = !showOffers;
+  byId('star-progress').hidden = !connected || game.best < 10n;
+  if (showOffers) byId('star-floor').textContent = fmt(game.starFloor) + '층 보상 · 별자리 하나를 골라 강화하세요.';
+  const total = game.stars.sword + game.stars.shield + game.stars.lantern;
+  byId('star-total').textContent = '★ ' + fmt(total);
+  for (const [id, star] of Object.entries(constellations)) {
+    const rank = game.stars[id];
+    const card = byId('star-' + id);
+    card.hidden = !showOffers || !game.starOffer.includes(id);
+    card.disabled = busy || challenge;
+    byId('star-' + id + '-detail').textContent = 'Lv. ' + fmt(rank) + ' → ' + fmt(rank + 1n) + ' · ' +
+      star.stat + ' +' + fmt(star.percent) + '%p';
+    byId('rank-' + id).textContent = star.name + ' Lv. ' + fmt(rank) + ' · ' + star.stat + ' +' + fmt(rank * star.percent) + '%';
+  }
 }
 
 function render() {
@@ -101,7 +128,7 @@ function render() {
   forecast.dataset.canWin = String(preview.canWin);
   const tip = byId('boss-tip');
   const recommendation = forecast.hidden || preview.canWin ? ''
-    : nextBossUpgrade(floor, attack(), game.maxHero, game.swordCost, game.vitalityCost);
+    : nextBossUpgrade(floor, attack(), game.swordCost, game.vitalityCost);
   tip.hidden = !recommendation;
   tip.textContent = recommendation;
   for (const [id, value] of Object.entries({
@@ -118,6 +145,7 @@ function render() {
   byId('hero-bar').style.width = Number(hero * 100n / game.maxHero) + '%';
   byId('enemy-bar').style.width = Number(shownHp * 100n / maxEnemy) + '%';
   const busy = !connected || inFlight || game.pending;
+  renderConstellations(busy);
   byId('job-rps').disabled = busy || challenge;
   byId('job-muk').disabled = busy || challenge;
   byId('auto-boss').checked = game.autoBoss;
@@ -138,12 +166,16 @@ function render() {
 
 function updateFromServer(data, returning, animateFarming = false) {
   const previousGold = game.gold;
+  const previousPower = attack();
+  const previousMaxHero = game.maxHero;
   const previousBest = game.best;
   const previousHp = hp;
   const previousHero = hero;
   const previousFoe = foe;
   const previousFloor = floor;
-  game = { gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
+  game = { stars: data.stars ? Object.fromEntries(Object.entries(data.stars).map(([key, value]) => [key, BigInt(value)])) : zeroStars,
+    starOffer: data.starOffer ?? [], starFloor: BigInt(data.starFloor ?? 0), power: BigInt(data.attackPower ?? 4n * BigInt(data.level) + 4n),
+    vitalityRank: BigInt(data.vitalityRank ?? 0), gold: BigInt(data.gold), level: BigInt(data.level), best: BigInt(data.best),
     maxHero: BigInt(data.maxHero), swordCost: BigInt(data.swordCost), vitalityCost: BigInt(data.vitalityCost), autoBoss: data.autoBoss, job: data.job, pending: data.pending, revision: data.revision };
   floor = BigInt(data.floor);
   foe = monster(floor, data.challenge);
@@ -153,10 +185,8 @@ function updateFromServer(data, returning, animateFarming = false) {
   challenge = data.challenge;
   if (floor !== previousFloor || challenge) {
     bossJustBecameWinnable = false;
-  } else if (!returning && (data.result === 'upgraded' || data.result === 'vitality_upgraded')) {
-    const priorAttack = data.result === 'upgraded' ? attack() - 4n : attack();
-    const priorHealth = data.result === 'vitality_upgraded' ? game.maxHero - 15n : game.maxHero;
-    if (!bossForecast(floor, priorAttack, priorHealth).canWin && bossForecast(floor, attack(), game.maxHero).canWin) {
+  } else if (!returning && (data.result === 'upgraded' || data.result === 'vitality_upgraded' || data.result?.startsWith('star_'))) {
+    if (!bossForecast(floor, previousPower, previousMaxHero).canWin && bossForecast(floor, attack(), game.maxHero).canWin) {
       bossJustBecameWinnable = true;
     }
   }
@@ -194,13 +224,17 @@ function updateFromServer(data, returning, animateFarming = false) {
   else if (data.result === 'lost') say('보스에게 패배했어요. ' + fmt(floor) + '층에서 사냥을 재개해요.');
   else if (data.result === 'challenging') say(fmt(floor) + '층 ' + foe.monarch.name + '에게 도전해요.');
   else if (data.result === 'upgraded') {
-    const before = bossForecast(floor, attack() - 4n, game.maxHero).hits;
+    const before = bossForecast(floor, powerAt(game.level - 1n), healthAt(game.level - 1n, game.vitalityRank)).hits;
     const after = bossForecast(floor, attack(), game.maxHero).hits;
     say(before > after
       ? '검 강화! 보스 처치까지 ' + fmt(before) + '타 → ' + fmt(after) + '타'
-      : '검 강화! 공격력 ' + fmt(attack()) + ' (+4)', true);
+      : '검 강화! 공격력 ' + fmt(attack()) + ' (+' + fmt(attack() - powerAt(game.level - 1n)) + ')', true);
   }
-  else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+15)');
+  else if (data.result === 'vitality_upgraded') say('체력을 강화했어요. 최대 체력 ' + fmt(game.maxHero) + ' (+' + fmt(game.maxHero - healthAt(game.level, game.vitalityRank - 1n)) + ')');
+  else if (data.result?.startsWith('star_')) {
+    const id = data.result.slice(5);
+    say(constellations[id].name + ' 강화! Lv. ' + fmt(game.stars[id]), true);
+  }
   else if (data.result === 'job_chosen') say('루나가 ' + jobs[game.job].name + '로 전직했어요!', true);
   else if (data.result === 'auto_on') say('이길 수 있는 보스에 자동으로 도전해요.');
   else if (data.result === 'auto_off') say('보스 자동 도전을 껐어요.');
@@ -281,6 +315,9 @@ async function synchronize(action = 'sync', targetCode = null) {
   }
 }
 
+for (const id of Object.keys(constellations)) {
+  byId('star-' + id).onclick = () => synchronize('star_' + id);
+}
 for (const id of ['rps', 'muk']) {
   byId('job-' + id).onclick = () => {
     if (inFlight || !window.confirm(jobs[id].name + '로 전직할까요? 전직은 한 번만 선택할 수 있어요.')) return;

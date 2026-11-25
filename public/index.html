@@ -38,6 +38,15 @@
 <button id="challenge" aria-describedby="boss-forecast"><span class="icon" aria-hidden="true">▾</span><span><strong id="challenge-label">보스 도전</strong><small id="target">1층 왕슬라임</small></span></button>
 </section>
 <p id="boss-forecast" class="boss-forecast" hidden><span id="boss-forecast-text"></span><small id="boss-tip" hidden></small></p>
+<section class="star-choices" id="star-choices" aria-labelledby="star-heading" hidden>
+<h2 id="star-heading">별자리 강화</h2>
+<p id="star-floor"></p>
+<div class="star-cards">
+<button type="button" class="star-card" id="star-sword" data-star="sword" hidden><img src="art/star-sword.webp" alt="" loading="lazy"><span class="star-card-caption"><strong>검자리</strong><small id="star-sword-detail"></small></span></button>
+<button type="button" class="star-card" id="star-shield" data-star="shield" hidden><img src="art/star-shield.webp" alt="" loading="lazy"><span class="star-card-caption"><strong>방패자리</strong><small id="star-shield-detail"></small></span></button>
+<button type="button" class="star-card" id="star-lantern" data-star="lantern" hidden><img src="art/star-lantern.webp" alt="" loading="lazy"><span class="star-card-caption"><strong>등불자리</strong><small id="star-lantern-detail"></small></span></button>
+</div>
+</section>
 <details class="extra-options">
 <summary>추가 설정</summary>
 <div class="actions secondary-actions">
@@ -53,6 +62,14 @@
   <button type="button" id="dismiss-summary">닫기</button>
 </section>
 <footer><div><small>검 레벨</small><strong id="level">1</strong></div><div><small>공격력</small><strong id="attack">8</strong></div><div><small>최고 클리어</small><strong id="best">—</strong></div></footer>
+<details id="star-progress" class="save-panel star-progress" hidden>
+<summary>루나의 별자리 <span id="star-total"></span></summary>
+<ul id="star-ranks">
+<li id="rank-sword"></li>
+<li id="rank-shield"></li>
+<li id="rank-lantern"></li>
+</ul>
+</details>
 <details class="save-panel">
 <summary>서버 저장 <span id="save-status">연결 중</span></summary>
 <p>저장 코드를 보관하면 다른 기기에서도 이어서 할 수 있어요. 이 코드로 저장에 접근할 수 있으니 개인적으로 보관하세요.</p>

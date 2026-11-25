@@ -102,3 +102,17 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 .job-choices .actions button{min-height:58px}
 .job-name{color:#e2b5ff;font-size:.8rem}
 .skill-banner{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);white-space:nowrap;padding:.35em .7em;background:#1c1529eb;color:#fff5e7;border:1px solid #dfb7ff;font-size:clamp(.82rem,3vw,1.25rem);font-weight:750;pointer-events:none}
+
+.star-choices{margin:14px 0;padding:14px;border:1px solid #78669c;background:radial-gradient(ellipse at top,#302248,#1a1428 75%)}
+.star-choices h2{font-size:1.1rem;color:#f8e7ff}
+.star-choices p{margin:4px 0 11px;color:#ddd1ee;font-size:.9rem}
+.star-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.star-card{min-width:0;padding:0;overflow:hidden;border:1px solid #78669c;background:#181123;color:#f7ebff;text-align:left;font:inherit;cursor:pointer}
+.star-card[hidden]{display:none}
+.star-card:not(:disabled):hover,.star-card:focus-visible{border-color:#e8c9ff;box-shadow:0 0 15px #ab7feb55}
+.star-card:disabled{cursor:default}
+.star-card img{display:block;width:100%;height:clamp(106px,22vw,170px);object-fit:contain;object-position:center;background:#110123}
+.star-card-caption{display:block;padding:8px 10px;background:#281c39}
+.star-card-caption small{margin-top:3px;color:#e1cdeb;font-size:.82rem}
+.star-progress ul{padding-left:1.15rem;margin:9px 0 0;color:#dfcfee;font-size:.9rem}
+#star-total{float:right;color:#f7cc8f}
