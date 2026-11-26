@@ -1,0 +1,261 @@
+create or replace function public.infinityr_play(save_code text, action text, expected_revision text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  code_hash bytea;
+  state infinityr_private.progress%rowtype;
+  now_ms bigint;
+  elapsed bigint;
+  reward numeric := 0;
+  attack numeric;
+  hero_max numeric;
+  hero_hp numeric;
+  enemy_hp numeric;
+  attack_turns numeric;
+  loss_turns numeric;
+  fight_turns numeric;
+  first_kill_turns numeric;
+  farm_hit_power numeric;
+  kills numeric;
+  play_floor numeric;
+  upgrade_cost numeric;
+  vitality_cost numeric;
+  enemy_max numeric;
+  boss_damage numeric;
+  result text := 'sync';
+  gap_seconds bigint;
+  completed integer := 0;
+  pending boolean := false;
+  duel jsonb;
+  skill jsonb;
+  bonus numeric;
+  claimed numeric;
+  offer_floor numeric;
+  offers text[];
+  reward_units numeric;
+  farm_gold numeric;
+  all_farm_turns bigint;
+  max_idle_farm_turns constant bigint := (8 * 60 * 60 * 1000) / 1050;
+  farm_capped boolean := false;
+  fight_attack numeric;
+  fight_hero_max numeric;
+begin
+  if save_code is null or save_code !~ '^[0-9a-f]{64}$'
+      or action is null or action not in ('create', 'sync', 'upgrade', 'vitality', 'challenge', 'auto_on', 'auto_off', 'job_rps', 'job_muk', 'star_sword', 'star_shield', 'star_lantern') then
+    raise sqlstate '22023' using message = 'invalid_input';
+  end if;
+
+  code_hash := pg_catalog.sha256(pg_catalog.decode(save_code, 'hex'));
+  if action = 'create' then
+    insert into infinityr_private.progress (save_hash, settled_ms)
+      values (code_hash, floor(extract(epoch from clock_timestamp()) * 1000)::bigint)
+      on conflict (save_hash) do nothing;
+  end if;
+
+  select * into state from infinityr_private.progress
+    where save_hash = code_hash for update;
+  if not found then
+    raise sqlstate 'P0002' using message = 'save_not_found';
+  end if;
+
+  now_ms := greatest(state.settled_ms, floor(extract(epoch from clock_timestamp()) * 1000)::bigint);
+  gap_seconds := greatest(0, now_ms - coalesce(state.observed_ms, state.settled_ms)) / 1000;
+  claimed := state.sword_stars + state.shield_stars + state.lantern_stars;
+  attack := ceil((4 * state.sword + 4) * (100 + 2 * state.sword_stars) / 100);
+  hero_max := ceil((54 + 6 * state.sword + 15 * state.vitality) * (100 + 3 * state.shield_stars) / 100);
+  hero_hp := hero_max;
+  -- Older saves counted hits at a fixed attack value. Preserve that damage once.
+  state.farm_damage := coalesce(state.farm_damage, state.paid * attack);
+  state.paid := 0;
+
+  loop
+    play_floor := state.best + 1;
+    enemy_max := 24 + 24 * play_floor;
+    boss_damage := 3 + 4 * play_floor;
+    fight_attack := coalesce(state.challenge_attack, attack);
+    fight_hero_max := coalesce(state.challenge_hero_max, hero_max);
+    attack_turns := ceil(enemy_max / fight_attack);
+    loss_turns := ceil(fight_hero_max / boss_damage);
+
+    if state.challenge_started_ms is null then
+      exit when not state.auto_boss or attack_turns > loss_turns
+        or (state.best >= 10 and state.job is null) or div(state.best, 10) > claimed;
+      state.challenge_started_ms := state.settled_ms;
+      if result = 'sync' then result := 'challenging'; end if;
+    end if;
+
+    state.challenge_attack := fight_attack;
+    state.challenge_hero_max := fight_hero_max;
+    elapsed := (now_ms - state.challenge_started_ms) / 1050;
+    bonus := 0;
+    if state.job is not null and least(attack_turns, loss_turns) >= 5 then
+      duel := infinityr_private.hand_duel(state.job, code_hash, state.challenge_started_ms);
+      bonus := (duel->>'bonus')::numeric;
+      attack_turns := greatest(5, attack_turns - bonus);
+      if elapsed between 4 and 5 and not pending then
+        skill := duel || jsonb_build_object('id', state.challenge_started_ms::text, 'job', state.job, 'struck', elapsed >= 5);
+      end if;
+    end if;
+    fight_turns := least(attack_turns, loss_turns);
+    if elapsed < fight_turns then
+      hero_hp := fight_hero_max - elapsed * boss_damage;
+      enemy_hp := enemy_max - (elapsed + case when elapsed >= 5 then bonus else 0 end) * fight_attack;
+      exit;
+    end if;
+
+    -- Keep any remaining elapsed time for the next call after a long catch-up.
+    if completed >= 128 then
+      pending := true;
+      hero_hp := fight_hero_max;
+      enemy_hp := enemy_max;
+      exit;
+    end if;
+    completed := completed + 1;
+
+    state.settled_ms := state.challenge_started_ms + fight_turns::bigint * 1050;
+    state.challenge_started_ms := null;
+    state.challenge_attack := null;
+    state.challenge_hero_max := null;
+    if attack_turns <= loss_turns then
+      state.best := play_floor;
+      state.farm_damage := 0;
+      reward := reward + 3 * (2 + div(play_floor - 1, 5));
+      result := 'won';
+    else
+      result := 'lost';
+      exit;
+    end if;
+  end loop;
+
+  if state.challenge_started_ms is null then
+    hero_hp := hero_max;
+    play_floor := state.best + 1;
+    enemy_max := 12 + 12 * play_floor;
+    enemy_hp := enemy_max;
+    attack_turns := ceil(enemy_hp / attack);
+    all_farm_turns := (now_ms - state.settled_ms) / 1050;
+    farm_capped := all_farm_turns > max_idle_farm_turns;
+    elapsed := least(all_farm_turns, max_idle_farm_turns);
+    first_kill_turns := ceil((enemy_max - state.farm_damage) / attack);
+    if elapsed < first_kill_turns then
+      kills := 0;
+      state.farm_damage := state.farm_damage + elapsed * attack;
+    else
+      kills := 1 + div(elapsed - first_kill_turns, attack_turns);
+      state.farm_damage := mod(elapsed - first_kill_turns, attack_turns) * attack;
+    end if;
+    if elapsed > 0 then farm_hit_power := attack; end if;
+    state.settled_ms := state.settled_ms + all_farm_turns * 1050;
+    farm_gold := kills * (2 + div(play_floor - 1, 5));
+    reward_units := state.star_gold_carry + farm_gold * state.lantern_stars;
+    reward := reward + farm_gold + div(reward_units, 100);
+    state.star_gold_carry := mod(reward_units, 100);
+    enemy_hp := enemy_max - state.farm_damage;
+  end if;
+
+  if div(state.best, 10) > claimed then
+    offer_floor := (claimed + 1) * 10;
+    offers := infinityr_private.constellation_offer(code_hash, offer_floor);
+  end if;
+
+  state.gold := state.gold + reward;
+  upgrade_cost := infinityr_private.sword_price(state.sword);
+
+  vitality_cost := infinityr_private.vitality_price(state.vitality);
+
+  if not pending and action in ('upgrade', 'vitality', 'challenge', 'auto_on', 'auto_off', 'job_rps', 'job_muk', 'star_sword', 'star_shield', 'star_lantern') then
+    if expected_revision is distinct from state.revision::text then
+      result := 'stale';
+    elsif action in ('auto_on', 'auto_off') then
+      state.auto_boss := action = 'auto_on';
+      if state.challenge_started_ms is null then state.settled_ms := now_ms; end if;
+      state.revision := state.revision + 1;
+      result := action;
+    elsif state.challenge_started_ms is not null and action not in ('upgrade', 'vitality') then
+      result := 'busy';
+    elsif action in ('job_rps', 'job_muk') then
+      if state.best >= 10 and state.job is null then
+        state.job := case when action = 'job_rps' then 'rps' else 'muk' end;
+        if state.auto_boss then state.settled_ms := now_ms; end if;
+        state.revision := state.revision + 1;
+        result := 'job_chosen';
+      end if;
+    elsif substring(action from 6) = any(offers) and action in ('star_sword', 'star_shield', 'star_lantern') then
+      case action
+        when 'star_sword' then
+          state.sword_stars := state.sword_stars + 1;
+        when 'star_shield' then state.shield_stars := state.shield_stars + 1;
+        when 'star_lantern' then state.lantern_stars := state.lantern_stars + 1;
+      end case;
+      state.revision := state.revision + 1;
+      if state.auto_boss then state.settled_ms := now_ms; end if;
+      attack := ceil((4 * state.sword + 4) * (100 + 2 * state.sword_stars) / 100);
+      hero_max := ceil((54 + 6 * state.sword + 15 * state.vitality) * (100 + 3 * state.shield_stars) / 100);
+      hero_hp := hero_max;
+      if div(state.best, 10) > claimed + 1 then
+        offer_floor := offer_floor + 10;
+        offers := infinityr_private.constellation_offer(code_hash, offer_floor);
+      else
+        offer_floor := null;
+        offers := null;
+      end if;
+      result := action;
+    elsif action = 'upgrade' and state.gold >= upgrade_cost then
+      state.gold := state.gold - upgrade_cost;
+      state.sword := state.sword + 1;
+      upgrade_cost := infinityr_private.sword_price(state.sword);
+      state.revision := state.revision + 1;
+      attack := ceil((4 * state.sword + 4) * (100 + 2 * state.sword_stars) / 100);
+      hero_max := ceil((54 + 6 * state.sword + 15 * state.vitality) * (100 + 3 * state.shield_stars) / 100);
+      if state.challenge_started_ms is null then
+        hero_hp := hero_max;
+      end if;
+      result := 'upgraded';
+    elsif action = 'vitality' and state.gold >= vitality_cost then
+      state.gold := state.gold - vitality_cost;
+      state.vitality := state.vitality + 1;
+      state.revision := state.revision + 1;
+      hero_max := ceil((54 + 6 * state.sword + 15 * state.vitality) * (100 + 3 * state.shield_stars) / 100);
+      vitality_cost := infinityr_private.vitality_price(state.vitality);
+      if state.challenge_started_ms is null then
+        hero_hp := hero_max;
+      end if;
+      result := 'vitality_upgraded';
+    elsif action = 'challenge' then
+      state.challenge_started_ms := now_ms;
+      state.challenge_attack := attack;
+      state.challenge_hero_max := hero_max;
+      state.revision := state.revision + 1;
+      enemy_max := 24 + 24 * play_floor;
+      enemy_hp := enemy_max;
+      result := 'challenging';
+    end if;
+  end if;
+
+  update infinityr_private.progress set
+    gold = state.gold, sword = state.sword, vitality = state.vitality, best = state.best, paid = state.paid, farm_damage = state.farm_damage,
+    settled_ms = state.settled_ms, challenge_started_ms = state.challenge_started_ms,
+    challenge_attack = state.challenge_attack, challenge_hero_max = state.challenge_hero_max,
+    revision = state.revision, auto_boss = state.auto_boss, observed_ms = now_ms, job = state.job,
+    sword_stars = state.sword_stars, shield_stars = state.shield_stars,
+    lantern_stars = state.lantern_stars, star_gold_carry = state.star_gold_carry
+  where save_hash = code_hash;
+
+  return jsonb_build_object(
+    'gold', state.gold::text, 'level', state.sword::text, 'best', state.best::text,
+    'floor', play_floor::text, 'hp', enemy_hp::text, 'maxEnemy', enemy_max::text, 'hero', hero_hp::text,
+    'swordCost', upgrade_cost::text, 'maxHero', hero_max::text, 'vitalityCost', vitality_cost::text,
+    'fightAttack', state.challenge_attack::text, 'fightMaxHero', state.challenge_hero_max::text,
+    'challenge', state.challenge_started_ms is not null, 'revision', state.revision::text,
+    'reward', reward::text, 'farmHitPower', farm_hit_power::text, 'farmCapped', farm_capped, 'result', result,
+    'turnDelay', 1050 - mod(greatest(0, now_ms - coalesce(state.challenge_started_ms, state.settled_ms)), 1050),
+    'attackPower', attack::text, 'vitalityRank', state.vitality::text,
+    'stars', jsonb_build_object('sword', state.sword_stars::text, 'shield', state.shield_stars::text, 'lantern', state.lantern_stars::text),
+    'starOffer', offers, 'starFloor', offer_floor::text,
+    'job', state.job, 'skill', skill, 'autoBoss', state.auto_boss, 'gapSeconds', gap_seconds::text, 'pending', pending
+  );
+end;
+$$;

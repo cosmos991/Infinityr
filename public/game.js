@@ -219,7 +219,7 @@ function updateFromServer(data, returning, animateFarming = false) {
   }
   const reward = BigInt(data.reward);
   if (animateFarming && !returning && !reduced.matches && !previousFoe.boss
-      && !foe.boss && floor === previousFloor && (reward || hp < previousHp)) {
+      && !foe.boss && floor === previousFloor && data.farmHitPower && (reward || hp < previousHp)) {
     farmImpact = { phase: 'windup', at: performance.now(), gold: previousGold, hp: previousHp, fatal: reward > 0n };
   } else if (!animateFarming || returning || floor !== previousFloor || foe.boss) {
     farmImpact = undefined;
@@ -228,7 +228,8 @@ function updateFromServer(data, returning, animateFarming = false) {
   if (!returning && (counter || reward || (floor === previousFloor && foe.boss === previousFoe.boss && hp < previousHp))) {
     effect = {
       at: farmImpact?.phase === 'windup' ? farmImpact.at : performance.now(),
-      hit: (previousFoe.boss ? (previousFightAttack ?? previousPower) : (game.fightAttack ?? attack())) * BigInt(data.skill?.struck ? 1 + data.skill.bonus : 1),
+      hit: (previousFoe.boss ? (previousFightAttack ?? previousPower)
+        : BigInt(data.farmHitPower ?? game.fightAttack ?? attack())) * BigInt(data.skill?.struck ? 1 + data.skill.bonus : 1),
       combo: data.skill?.struck ? data.skill.bonus : 0,
       gold: reward, counter: counter ? previousFoe.monarch : null,
       defeated: reward ? (data.result === 'won' ? monster(game.best, true) : monster(floor)) : null
@@ -292,7 +293,7 @@ async function synchronize(action = 'sync', targetCode = null) {
     remember();
     const gap = BigInt(data.gapSeconds);
     if (!catchUp && (gap >= 8n || data.pending)) catchUp = { gap, gold: 0n };
-    updateFromServer(data, Boolean(catchUp), priorConnection && action === 'sync' && !targetCode);
+    updateFromServer(data, Boolean(catchUp), priorConnection && !targetCode);
     if (catchUp) {
       catchUp.gold += BigInt(data.reward);
       if (!data.pending) {
@@ -303,7 +304,8 @@ async function synchronize(action = 'sync', targetCode = null) {
           .filter(Boolean).join(' ');
         const cleared = game.best ? '최고 ' + fmt(game.best) + '층 클리어' : '클리어한 층 없음';
         byId('return-summary-text').textContent = (time ? '방치 ' + time + ' · ' : '') +
-          '골드 +' + fmt(catchUp.gold) + ' · ' + cleared;
+          '골드 +' + fmt(catchUp.gold) + ' · ' + cleared +
+          (data.farmCapped ? ' · 사냥 보상 최대 8시간 적용' : '');
         byId('return-summary').hidden = false;
         say('방치 보상을 정산했어요.');
         catchUp = null;
