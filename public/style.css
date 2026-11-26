@@ -118,3 +118,14 @@ footer div{padding:10px 4px;overflow-wrap:anywhere}footer div+div{border-left:1p
 #star-total{float:right;color:#f7cc8f}
 
 #upgrade,#vitality{touch-action:manipulation;user-select:none;-webkit-touch-callout:none}
+
+.climb-progress{margin-bottom:14px;padding:10px 12px;border:1px solid #504167;background:#20172e}
+.climb-heading{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;font-size:.875rem}
+.climb-heading strong{color:#efd9ff}
+#climb-target{color:#dbc8ee}
+.climb-track{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px;margin-top:8px}
+.climb-track span{height:7px;border-radius:2px;background:#403351}
+.climb-track span:last-child{outline:1px solid #8b6c9f}
+.climb-track span.cleared{background:#b397ed}
+.climb-track[data-unlocked="true"] span{background:#e7bf7f}
+.climb-track[data-unlocked="true"] span:last-child{outline-color:#ffdfa1;box-shadow:0 0 7px #f7c87d88}

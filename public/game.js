@@ -112,7 +112,24 @@ function renderConstellations(busy) {
   }
 }
 
+function renderClimb() {
+  const unlocked = game.starOffer.length > 0;
+  const completed = unlocked ? 10n : game.best % 10n;
+  const goal = unlocked ? game.starFloor : game.best + (10n - completed);
+  byId('climb-target').textContent = unlocked
+    ? fmt(goal) + '층 별자리 해금!'
+    : fmt(goal) + '층 보스까지 ' + fmt(10n - completed) + '층';
+  const track = byId('climb-track');
+  track.setAttribute('aria-valuenow', String(completed));
+  track.setAttribute('aria-valuetext', byId('climb-target').textContent);
+  track.dataset.unlocked = String(unlocked);
+  Array.from(track.children).forEach((step, index) => {
+    step.classList.toggle('cleared', index < Number(completed));
+  });
+}
+
 function render() {
+  renderClimb();
   const preview = bossForecast(floor, attack(), game.maxHero);
   const bossName = foe.monarch.name;
   const displayedMaxHero = game.fightMaxHero ?? game.maxHero;
